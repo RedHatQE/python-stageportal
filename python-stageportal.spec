@@ -1,5 +1,5 @@
 Name:		python-stageportal
-Version:	0.1
+Version:	0.0
 Release:	1%{?dist}
 Summary:	Python library and cli to work with stage portal
 
@@ -24,8 +24,8 @@ Requires:	python-requests python-BeautifulSoup
 %install
 mkdir -p $RPM_BUILD_ROOT%{python_sitelib}/
 mkdir -p $RPM_BUILD_ROOT%{_bindir}
-cp staggeportal.py $RPM_BUILD_ROOT%{python_sitelib}/
-cp staggeportal $RPM_BUILD_ROOT%{_bindir}
+cp stageportal.py $RPM_BUILD_ROOT%{python_sitelib}/
+cp stageportal $RPM_BUILD_ROOT%{_bindir}
 %clean
 rm -rf $RPM_BUILD_ROOT
 
