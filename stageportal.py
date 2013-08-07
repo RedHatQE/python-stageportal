@@ -189,6 +189,9 @@ def portal_login(login, password, url, maxtries=20):
             if req2.content.find('Open Source Assurance Agreement Acceptance Confirmation') != -1 or req2.content.find('Welcome&nbsp;' + login) != -1:
                 ntry = 0
                 break
+        else:
+            break
+
     assert ntry < maxtries
     return s
 
