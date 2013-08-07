@@ -212,36 +212,39 @@ def check_subscription(uid, login, password, url, maxtries=20):
 def create_distributor(name, login, password, url, candlepin_url, maxtries=20):
     """ Create new distributor on portal"""
     ntry = 0
-    while True:
+    while ntry < maxtries:
+        ntry += 1
         session = portal_login(login, password, url)
         req1 = session.get(url + "/management/distributors/", verify=False, headers={'Accept-Language': 'en-US'})
-        assert req1.status_code == 200
+        if req1.status_code != 200:
+            continue
         req2 = session.get(url + "/management/distributor/distributors/create/sam", verify=False, headers={'Accept-Language': 'en-US'})
-        assert req2.status_code == 200
+        if req2.status_code != 200:
+            continue
         auth_token_search = re.search(".*name=\"authenticity_token\" type=\"hidden\" value=\"(.*=)\"", req2.content)
         if auth_token_search is not None:
             auth_token = auth_token_search.group(1)
-            break
         else:
             time.sleep(5)
-            ntry += 1
-        if ntry > maxtries:
-            return None
-    data = {"authenticity_token": auth_token,
-            "distributor[consumer_type]": "sam", "distributor[name]": name,
-            "commit": "Register",
-            "asp_charset": "iso-8859-1"}
-    req3 = session.post(url + "/management/distributor/distributors/create/sam", verify=False, headers={'Accept-Language': 'en-US'}, data=data)
-    assert req3.status_code == 200
-    # returning UUID
-    uuid=req3.request.path_url.replace("/management/distributors/","")
-    # hackaround candlepin
-    req4 = requests.put(candlepin_url + "/subscription/consumers/%s" % uuid,
-            data='{"facts":{"system.certificate_version":"3.2"}}',
-            headers={'Content-Type': 'application/json'},
-            verify=False, auth=(login, password))
-    assert req4.status_code == 204
-    return uuid
+            continue
+        data = {"authenticity_token": auth_token,
+                "distributor[consumer_type]": "sam", "distributor[name]": name,
+                "commit": "Register",
+                "asp_charset": "iso-8859-1"}
+        req3 = session.post(url + "/management/distributor/distributors/create/sam", verify=False, headers={'Accept-Language': 'en-US'}, data=data)
+        if req3.status_code != 200:
+            continue
+        # returning UUID
+        uuid = req3.request.path_url.replace("/management/distributors/","")
+        # hackaround candlepin
+        req4 = requests.put(candlepin_url + "/subscription/consumers/%s" % uuid,
+                            data='{"facts":{"system.certificate_version":"3.2"}}',
+                            headers={'Content-Type': 'application/json'},
+                            verify=False, auth=(login, password))
+        if req4.status_code != 204:
+            continue
+        return uuid
+    assert ntry < maxtries
 
 def distributor_attach_everything(uuid, login, password, url, maxtries=20):
     """ Attach all available subscriptions to distributor """
