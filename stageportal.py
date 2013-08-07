@@ -161,27 +161,35 @@ def hock_sku(login, SKU, quantity, start_date, api_url):
     regNumber = order['regNumbers'][0][0]['regNumber']
     return activate(regNumber, start_date, login, api_url)
 
-def portal_login(login, password, url):
+def portal_login(login, password, url, maxtries=20):
     """ Perform portal login, accept terms if needed """
     
     if url.startswith("https://access."):
         url = "https://www." + url[15:]
     url += '/wapps/sso/login.html'
 
-    s = requests.session()
-    s.verify = False
+    ntry = 0
+    while ntry < maxtries:
+        ntry += 1
+        s = requests.session()
+        s.verify = False
 
-    req1 = s.post(url,
-            data={'_flowId': 'legacy-login-flow', 'failureRedirect': url,
-                  'username': login, 'password': password},
-            headers={'Accept-Language': 'en-US'})
-    assert req1.status_code == 200
-    if req1.content.find('Welcome&nbsp;' + login) == -1:
-        # Accepting terms
-        req2 = s.post(url, params={'_flowId': 'legacy-login-flow', '_flowExecutionKey': 'e1s1'},
-                      data={'accepted': 'true', '_accepted': 'on', 'optionalTerms_28': 'accept', '_eventId_submit': 'Continue', '_flowExecutionKey': 'e1s1', 'redirect': ''})
-        assert req2.status_code == 200
-        assert req2.content.find('Open Source Assurance Agreement Acceptance Confirmation') != -1 or req2.content.find('Welcome&nbsp;' + login) != -1
+        req1 = s.post(url,
+                      data={'_flowId': 'legacy-login-flow', 'failureRedirect': url,
+                            'username': login, 'password': password},
+                      headers={'Accept-Language': 'en-US'})
+        if req1.status_code != 200:
+            continue
+        if req1.content.find('Welcome&nbsp;' + login) == -1:
+            # Accepting terms
+            req2 = s.post(url, params={'_flowId': 'legacy-login-flow', '_flowExecutionKey': 'e1s1'},
+                          data={'accepted': 'true', '_accepted': 'on', 'optionalTerms_28': 'accept', '_eventId_submit': 'Continue', '_flowExecutionKey': 'e1s1', 'redirect': ''})
+            if req2.status_code != 200:
+                continue
+            if req2.content.find('Open Source Assurance Agreement Acceptance Confirmation') != -1 or req2.content.find('Welcome&nbsp;' + login) != -1:
+                ntry = 0
+                break
+    assert ntry < maxtries
     return s
 
 def check_subscription(uid, login, password, url, maxtries=20):
