@@ -256,15 +256,25 @@ def distributor_attach_everything(uuid, login, password, url, maxtries=20, subs_
     """ Attach all available subscriptions to distributor """
     ntry = 0
     while True:
+        if ntry > maxtries:
+            # no more tries left
+            break
         session = portal_login(login, password, url)
         req1 = session.get(url + "/management/distributors/%s" % uuid, verify=False, headers={'Accept-Language': 'en-US'})
-        assert req1.status_code == 200
-        auth_token = re.search(".*name=\"authenticity_token\" type=\"hidden\" value=\"(.*=)\"", req1.content).group(1)
+        if req1.status_code != 200:
+            ntry += 1
+            continue
+        search = re.search(".*name=\"authenticity_token\" type=\"hidden\" value=\"(.*=)\"", req1.content)
+        if search is None:
+            ntry += 1
+            continue
+        auth_token = search.group(1)
         subscriptions = []
         bs = BeautifulSoup(req1.content)
         for tag in bs.findAll('select'):
             subscriptions += re.findall("quantity\[([0-9,a-f]+)\]\">.*<option value=\"([0-9]+)\" selected", str(tag), re.DOTALL)
-        if len(subscriptions) >= subs_count or ntry > maxtries:
+        if len(subscriptions) >= subs_count:
+            # all required subscriptions are attachable
             break
         ntry += 1
     assert subscriptions != [], "Nothing to attach"
