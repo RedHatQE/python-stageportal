@@ -195,22 +195,25 @@ def portal_login(login, password, url, maxtries=20):
     assert ntry < maxtries
     return s
 
-def check_subscription(uid, login, password, url, maxtries=20):
+def check_subscriptions(uid_list, login, password, url, maxtries=20):
     """ Check subscription status """
     session = portal_login(login, password, url)
     assert session is not None
     ntry = 0
-    while True:
-        req1 = session.get(url + "/wapps/support/protected/details.html", params={'subscriptionId': uid}, verify=False, headers={'Accept-Language': 'en-US'})
-        bs = BeautifulSoup(req1.content)
-        try:
-            if len(bs.findAll("table")[0].findAll("td")) > 0:
-                return req1
-        except:
-            pass
-        ntry += 1
-        if ntry > maxtries:
-            return None
+    for uid in uid_list:
+        while True:
+            req1 = session.get(url + "/wapps/support/protected/details.html", params={'subscriptionId': uid}, verify=False, headers={'Accept-Language': 'en-US'})
+            bs = BeautifulSoup(req1.content)
+            try:
+                if len(bs.findAll("table")[0].findAll("td")) > 0:
+                    # subscription is present
+                    break
+            except:
+                pass
+            ntry += 1
+            if ntry > maxtries:
+                return None
+    return True
 
 def create_distributor(name, login, password, url, candlepin_url, maxtries=20):
     """ Create new distributor on portal"""
