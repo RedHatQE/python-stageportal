@@ -252,7 +252,7 @@ def create_distributor(name, login, password, url, candlepin_url, maxtries=20):
         return uuid
     assert ntry < maxtries
 
-def distributor_attach_everything(uuid, login, password, url, maxtries=20):
+def distributor_attach_everything(uuid, login, password, url, maxtries=20, subs_count=1):
     """ Attach all available subscriptions to distributor """
     ntry = 0
     while True:
@@ -264,10 +264,11 @@ def distributor_attach_everything(uuid, login, password, url, maxtries=20):
         bs = BeautifulSoup(req1.content)
         for tag in bs.findAll('select'):
             subscriptions += re.findall("quantity\[([0-9,a-f]+)\]\">.*<option value=\"([0-9]+)\" selected", str(tag), re.DOTALL)
-        if subscriptions != [] or ntry > maxtries:
+        if len(subscriptions) >= subs_count or ntry > maxtries:
             break
         ntry += 1
     assert subscriptions != [], "Nothing to attach"
+    assert len(subscriptions) >= subs_count, "Can't attach %s subscriptions" % subs_count
 
     data = {"authenticity_token": auth_token,
             "stype": "match",
