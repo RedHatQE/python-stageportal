@@ -249,6 +249,12 @@ def create_distributor(name, login, password, url, candlepin_url, maxtries=20):
                             verify=False, auth=(login, password))
         if req4.status_code != 204:
             continue
+        req5 = requests.put(candlepin_url + "/subscription/consumers/%s" % uuid,
+                            data='{"capabilities":[{"name":"cores"},{"name":"ram"},{"name":"instance_multiplier"}]}',
+                            headers={'Content-Type': 'application/json'},
+                            verify=False, auth=(login, password))
+        if req5.status_code != 204:
+            continue
         return uuid
     assert ntry < maxtries
 
