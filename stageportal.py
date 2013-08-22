@@ -9,6 +9,7 @@ import tempfile
 import argparse
 import sys
 import time
+import pprint
 from BeautifulSoup import BeautifulSoup
 
 def get_user(login, api_url):
@@ -258,46 +259,94 @@ def create_distributor(name, login, password, url, candlepin_url, maxtries=20):
         return uuid
     assert ntry < maxtries
 
-def distributor_attach_everything(uuid, login, password, url, maxtries=20, subs_count=1):
-    """ Attach all available subscriptions to distributor """
+def _distributor_auth_token(uuid, login, password, url):
+    """ Get 'distributor' page content and auth token """
+    session = portal_login(login, password, url)
+    req = session.get(url + "/management/distributors/%s" % uuid, verify=False, headers={'Accept-Language': 'en-US'})
+    if req.status_code != 200:
+        return None, None, None
+    search = re.search(".*name=\"authenticity_token\" type=\"hidden\" value=\"(.*=)\"", req.content)
+    if search is None:
+        return None, None, None
+    return session, req.content, search.group(1)
+
+def distributor_available_subscriptions(uuid, login, password, url, maxtries=20, expected_subs_count=None):
+    """ Get all attachable subs for distributor """
     ntry = 0
+    subscriptions = []
     while True:
         if ntry > maxtries:
             # no more tries left
             break
-        session = portal_login(login, password, url)
-        req1 = session.get(url + "/management/distributors/%s" % uuid, verify=False, headers={'Accept-Language': 'en-US'})
-        if req1.status_code != 200:
+        (_, content, auth_token) = _distributor_auth_token(uuid, login, password, url)
+        if auth_token is None:
             ntry += 1
             continue
-        search = re.search(".*name=\"authenticity_token\" type=\"hidden\" value=\"(.*=)\"", req1.content)
-        if search is None:
-            ntry += 1
-            continue
-        auth_token = search.group(1)
         subscriptions = []
-        bs = BeautifulSoup(req1.content)
-        for tag in bs.findAll('select'):
-            subscriptions += re.findall("quantity\[([0-9,a-f]+)\]\">.*<option value=\"([0-9]+)\" selected", str(tag), re.DOTALL)
-        if len(subscriptions) >= subs_count:
-            # all required subscriptions are attachable
+        bs = BeautifulSoup(content)
+        for tag in bs.findAll('tr'):
+            if tag.findAll('select') != []:
+                (_id, quantity) =  re.findall("quantity\[([0-9,a-f]+)\]\">.*<option value=\"([0-9]+)\" selected", str(tag.findAll('select')), re.DOTALL)[0]
+                name = None
+                date1 = None
+                date2 = None
+                for td in tag.findAll('td'):
+                    if str(td).find('"subscription"') != -1:
+                        name = td.text
+                    if str(td).find('"date"') != -1:
+                        if date1 is None:
+                            date1 = td.text
+                        else:
+                            date2 = td.text
+                subscriptions.append({'id': _id,
+                                      'name': name,
+                                      'quantity': quantity,
+                                      'date_start': date1, 'date_end': date2})
+        if expected_subs_count is None or len(subscriptions) >= expected_subs_count:
+            # all required subscriptions are found
             break
         ntry += 1
+    return subscriptions
+
+def distributor_attach_everything(uuid, login, password, url, maxtries=20, subs_count=1):
+    """ Attach all available subscriptions to distributor """
+    return distributor_attach_subscriptions(uuid, login, password, url, maxtries=20, subs_count=1, subscriptions=None)
+
+def distributor_attach_subscriptions(uuid, login, password, url, maxtries=20, subs_count=1, subscriptions=None):
+    """ Attach subscriptions to distributor """
+    if subscriptions is None:
+        subscriptions = distributor_available_subscriptions(uuid, login, password, url, maxtries, subs_count)
     assert subscriptions != [], "Nothing to attach"
     assert len(subscriptions) >= subs_count, "Can't attach %s subscriptions" % subs_count
 
-    data = {"authenticity_token": auth_token,
-            "stype": "match",
-            "checkall_avail": 0,
-            "checkgroup[]": [],
-            "commit": "Attach Selected"
-            }
-    for sub, quantity in subscriptions:
-        data["checkgroup[]"].append(sub)
-        data["quantity[%s]" % sub] = quantity
-    req2 = session.post(url + "/management/distributors/%s/bind/selected" % uuid, verify=False, headers={'Accept-Language': 'en-US'}, data=data)
-    assert req2.status_code == 200
-    return req2
+    ntry = 0
+    req = None
+    while ntry < maxtries:
+        if ntry > maxtries:
+            # no more tries left
+            break
+
+        (session, _, auth_token) = _distributor_auth_token(uuid, login, password, url)
+        if auth_token is None:
+            ntry += 1
+            continue
+
+        data = {"authenticity_token": auth_token,
+                "stype": "match",
+                "checkall_avail": 0,
+                "checkgroup[]": [],
+                "commit": "Attach Selected"
+        }
+        for sub in subscriptions:
+            data["checkgroup[]"].append(sub['id'])
+            data["quantity[%s]" % sub['id']] = sub['quantity']
+        req = session.post(url + "/management/distributors/%s/bind/selected" % uuid, verify=False, headers={'Accept-Language': 'en-US'}, data=data)
+        if req.status_code != 200:
+            ntry += 1
+            continue
+        else:
+            break
+    return req
 
 def distributor_download_manifest(uuid, login, password, url):
     """ Download manifest """
@@ -334,28 +383,51 @@ def delete_distributor(uuid, login, password, url):
 
 if __name__ == '__main__':
 
-    ACTIONS = ['user_create', 'distributor_create', 'distributor_add_subscriptions', 'distributor_delete', 'distributor_get_manifest']
+    PWLESS_ACTIONS = ['user_get',
+                      'sku_add']
+    DIST_ACTIONS = ['distributor_create',
+                    'distributor_available_subscriptions',
+                    'distributor_add_subscriptions',
+                    'distributor_delete',
+                    'distributor_get_manifest']
+    ALL_ACTIONS = ['user_create'] + PWLESS_ACTIONS + DIST_ACTIONS
 
-    argparser = argparse.ArgumentParser(description='Stage portal tool')
+    argparser = argparse.ArgumentParser(description='Stage portal tool', epilog = 'vkuznets@redhat.com')
 
     argparser.add_argument('--action', required=True,
-            help='Requested action [%s]' % ", ".join(act for act in ACTIONS))
-    argparser.add_argument('--login', required=True,
-            help='User login')
-    argparser.add_argument('--password',
-            help='User password')
-    argparser.add_argument('--sku-id', required=False, help='SKU id to add')
-    argparser.add_argument('--sku-quantity', required=False, help='SKU quantity to add')
-    argparser.add_argument('--sku-start-date', required=False, help='SKU start date')
-    argparser.add_argument('--distributor-name', required=False, help='Distributor name')
-    argparser.add_argument('--distributor-uuid', required=False, help='Distributor uuid')
+                           help='Requested action', choices=ALL_ACTIONS)
     argparser.add_argument('--api', required=True, help='The URL to the stage portal\'s API.')
     argparser.add_argument('--portal', required=True, help='The URL to the stage portal.')
     argparser.add_argument('--candlepin', required=True, help='The URL to the stage portal\'s Candlepin.')
 
-    args = argparser.parse_args()
-    if args.password is None and args.action in ACTIONS:
-        sys.stderr.write('You should specify --password\n')
+    [args, ignored_args] = argparser.parse_known_args()
+
+    argparser.add_argument('--login', required=True,
+            help='User login')
+
+    if not args.action in PWLESS_ACTIONS:
+        argparser.add_argument('--password', required=True, help='User password')
+
+    if args.action=='sku_add':
+        argparser.add_argument('--sku-id', required=True, help='SKU id to add')
+        argparser.add_argument('--sku-quantity', required=True, help='SKU quantity to add')
+        argparser.add_argument('--sku-start-date', required=True, help='SKU start date')
+
+    if args.action == 'distributor_create':
+        argparser.add_argument('--distributor-name', required=True, help='Distributor name')
+    elif args.action in DIST_ACTIONS:
+        argparser.add_argument('--distributor-name', required=False, help='Distributor name')
+        argparser.add_argument('--distributor-uuid', required=False, help='Distributor uuid')
+
+    if args.action=='distributor_add_subscriptions':
+        argparser.add_argument('--all', required=False, action='store_true', default=False, help='attach all available subscriptions')
+        argparser.add_argument('--sub-id', required=False, help='sub id to attach to distributor')
+        argparser.add_argument('--sub-quantity', required=False, help='sub quantity to attach to distributor')
+
+    [args, ignored_args] = argparser.parse_known_args()
+
+    if args.action == 'distributor_add_subscriptions' and args.all is False and (args.sub_id is None or args.sub_quantity is None):
+        sys.stderr.write('You should specify --sub-id and --sub-quantity to attach specified subscription or use --all to attach all available subscriptions\n')
         sys.exit(1)
 
     if args.action == 'user_create':
@@ -363,16 +435,10 @@ if __name__ == '__main__':
     elif args.action == 'user_get':
         res = get_user(args.login, args.api)
     elif args.action=='sku_add':
-        if args.sku_id is None or args.sku_quantity is None or args.sku_start_date is None:
-            sys.stderr.write('You should specify --sku-id, --sku-quantity and --sku-start-date\n')
-            sys.exit(1)
         res = hock_sku(args.login, args.sku_id, args.sku_quantity, args.sku_start_date, args.api)
     elif args.action=='distributor_create':
-        if args.distributor_name is None:
-            sys.stderr.write("You should specify --distributor-name\n")
-            sys.exit(1)
         res = create_distributor(args.distributor_name, args.login, args.password, args.portal, args.candlepin)
-    elif args.action in ['distributor_add_subscriptions', 'distributor_delete', 'distributor_get_manifest']:
+    elif args.action in DIST_ACTIONS:
         if args.distributor_name is None and args.distributor_uuid is None:
             sys.stderr.write('You should specify --distributor-name or --distributor-uuid\n')
             sys.exit(1)
@@ -382,8 +448,14 @@ if __name__ == '__main__':
             distributor_uuid = args.distributor_uuid
         if distributor_uuid is None:
             res = None
+        elif args.action == 'distributor_available_subscriptions':
+            subs = distributor_available_subscriptions(distributor_uuid, args.login, args.password, args.portal)
+            res = pprint.pformat(subs)
         elif args.action == 'distributor_add_subscriptions':
-            res = distributor_attach_everything(distributor_uuid, args.login, args.password, args.portal)
+            if args.all:
+                res = distributor_attach_everything(distributor_uuid, args.login, args.password, args.portal)
+            else:
+                res = distributor_attach_subscriptions(distributor_uuid, args.login, args.password, args.portal, subscriptions=[{'id': args.sub_id, 'quantity': args.sub_quantity}])
         elif args.action == 'distributor_delete':
             res = delete_distributor(distributor_uuid, args.login, args.password, args.portal)
         elif args.action == 'distributor_get_manifest':
