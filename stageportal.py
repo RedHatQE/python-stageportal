@@ -310,7 +310,7 @@ def distributor_available_subscriptions(uuid, login, password, url, maxtries=20,
 
 def distributor_attach_everything(uuid, login, password, url, maxtries=20, subs_count=1):
     """ Attach all available subscriptions to distributor """
-    return distributor_attach_subscriptions(uuid, login, password, url, maxtries=20, subs_count=1, subscriptions=None)
+    return distributor_attach_subscriptions(uuid, login, password, url, maxtries=20, subs_count=subs_count, subscriptions=None)
 
 def distributor_attach_subscriptions(uuid, login, password, url, maxtries=20, subs_count=1, subscriptions=None):
     """ Attach subscriptions to distributor """
