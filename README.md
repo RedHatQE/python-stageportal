@@ -38,6 +38,17 @@ CLI usage example
 	$python stageportal.py --login samplecustomer01 --password changeme --api $API --candlepin $CANDLEPIN --portal $PORTAL --action distributor_add_subscriptions --distributor-name sam1 --all
 	<Response [200]>
 
+	# Listing subscriptions already attached to distributor
+	$python stageportal.py --login samplecustomer01 --password changeme --api $API --candlepin $CANDLEPIN --portal $PORTAL --action distributor_attached_subscriptions --distributor-name sam1
+	[{'date_end': u'07/26/2014',
+          'id': '8a99f98340a67e350140bf6d81d17064',
+          'name': u'Red Hat Directory Server (Replica)',
+          'quantity': u'6'}]
+
+	# Detaching subscriptions from distributor
+	$python stageportal.py --login samplecustomer01 --password changeme --api $API --candlepin $CANDLEPIN --portal $PORTAL --action distributor_detach_subscriptions --distributor-name sam1 --sub-ids 8a99f98340a67e350140bf6d92e77066
+	<Response [200]>
+
 	# Downloading manifest
 	$python stageportal.py --login samplecustomer01 --password changeme --api $API --portal $PORTAL --candlepin $CANDLEPIN --action distributor_get_manifest --distributor-name sam1       
 	/tmp/tmpPivvXu.zip
