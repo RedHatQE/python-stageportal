@@ -308,6 +308,33 @@ def distributor_available_subscriptions(uuid, login, password, url, maxtries=20,
         ntry += 1
     return subscriptions
 
+def distributor_attached_subscriptions(uuid, login, password, url, maxtries=20):
+    """ Get all already attached subs for distributor """
+    ntry = 0
+    subscriptions = []
+    while True:
+        if ntry > maxtries:
+            # no more tries left
+            break
+        (_, content, auth_token) = _distributor_auth_token(uuid, login, password, url)
+        if auth_token is None:
+            ntry += 1
+            continue
+        subscriptions = []
+        bs = BeautifulSoup(content)
+        for tag in bs.findAll('tr'):
+            if tag.findAll('td',{'class': 'subscription'}) != [] and tag.findAll('option') == []:
+                name = tag.findAll('td',{'class': 'subscription'})[0].getText()
+                quantity = tag.findAll('td',{'class': 'quantity'})[1].getText()
+                date = tag.findAll('td',{'class': 'date'})[0].getText()
+                _id = re.findall('value="([0-9,a-f]*)"', str(tag.findAll('td',{'class':'select'})[0]))[0]
+                subscriptions.append({'id': _id,
+                                      'name': name,
+                                      'quantity': quantity,
+                                      'date_end': date})
+        break
+    return subscriptions
+
 def distributor_attach_everything(uuid, login, password, url, maxtries=20, subs_count=1):
     """ Attach all available subscriptions to distributor """
     return distributor_attach_subscriptions(uuid, login, password, url, maxtries=20, subs_count=subs_count, subscriptions=None)
@@ -341,6 +368,35 @@ def distributor_attach_subscriptions(uuid, login, password, url, maxtries=20, su
             data["checkgroup[]"].append(sub['id'])
             data["quantity[%s]" % sub['id']] = sub['quantity']
         req = session.post(url + "/management/distributors/%s/bind/selected" % uuid, verify=False, headers={'Accept-Language': 'en-US'}, data=data)
+        if req.status_code != 200:
+            ntry += 1
+            continue
+        else:
+            break
+    return req
+
+def distributor_detach_subscriptions(uuid, login, password, url, maxtries=20, subscriptions=None):
+    """ Detach subscriptions from distributor """
+    ntry = 0
+    req = None
+    while ntry < maxtries:
+        if ntry > maxtries:
+            # no more tries left
+            break
+
+        (session, _, auth_token) = _distributor_auth_token(uuid, login, password, url)
+        if auth_token is None:
+            ntry += 1
+            continue
+
+        data = {"authenticity_token": auth_token,
+                "stype": "match",
+                "checkgroup[]": [],
+                "commit": "Attach Selected"
+        }
+        for sub in subscriptions:
+            data["checkgroup[]"].append(sub)
+        req = session.post(url + "/management/distributors/%s/unbind/selected" % uuid, verify=False, headers={'Accept-Language': 'en-US'}, data=data)
         if req.status_code != 200:
             ntry += 1
             continue
@@ -387,7 +443,9 @@ if __name__ == '__main__':
                       'sku_add']
     DIST_ACTIONS = ['distributor_create',
                     'distributor_available_subscriptions',
+                    'distributor_attached_subscriptions',
                     'distributor_add_subscriptions',
+                    'distributor_detach_subscriptions',
                     'distributor_delete',
                     'distributor_get_manifest']
     ALL_ACTIONS = ['user_create'] + PWLESS_ACTIONS + DIST_ACTIONS
@@ -424,6 +482,9 @@ if __name__ == '__main__':
         argparser.add_argument('--sub-id', required=False, help='sub id to attach to distributor')
         argparser.add_argument('--sub-quantity', required=False, help='sub quantity to attach to distributor')
 
+    if args.action=='distributor_detach_subscriptions':
+        argparser.add_argument('--sub-ids', required=True, nargs='+', help='sub ids to detach from distributor (space separated list)')
+
     [args, ignored_args] = argparser.parse_known_args()
 
     if args.action == 'distributor_add_subscriptions' and args.all is False and (args.sub_id is None or args.sub_quantity is None):
@@ -451,11 +512,16 @@ if __name__ == '__main__':
         elif args.action == 'distributor_available_subscriptions':
             subs = distributor_available_subscriptions(distributor_uuid, args.login, args.password, args.portal)
             res = pprint.pformat(subs)
+        elif args.action == 'distributor_attached_subscriptions':
+            subs = distributor_attached_subscriptions(distributor_uuid, args.login, args.password, args.portal)
+            res = pprint.pformat(subs)
         elif args.action == 'distributor_add_subscriptions':
             if args.all:
                 res = distributor_attach_everything(distributor_uuid, args.login, args.password, args.portal)
             else:
                 res = distributor_attach_subscriptions(distributor_uuid, args.login, args.password, args.portal, subscriptions=[{'id': args.sub_id, 'quantity': args.sub_quantity}])
+        elif args.action == 'distributor_detach_subscriptions':
+            res = distributor_detach_subscriptions(distributor_uuid, args.login, args.password, args.portal, subscriptions=args.sub_ids)
         elif args.action == 'distributor_delete':
             res = delete_distributor(distributor_uuid, args.login, args.password, args.portal)
         elif args.action == 'distributor_get_manifest':
