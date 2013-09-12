@@ -294,7 +294,10 @@ def distributor_available_subscriptions(uuid, login, password, url, maxtries=20,
         bs = BeautifulSoup(content)
         for tag in bs.findAll('tr'):
             if tag.findAll('select') != []:
-                (_id, quantity) = re.findall("quantity\[([0-9,a-f]+)\]\">.*<option value=\"([0-9]+)\" selected", str(tag.findAll('select')), re.DOTALL)[0]
+                try:
+                    (_id, quantity) = re.findall("quantity\[([0-9,a-f]+)\]\">.*<option value=\"([0-9]+)\" selected", str(tag.findAll('select')), re.DOTALL)[0]
+                except IndexError:
+                    continue
                 name = None
                 date1 = None
                 date2 = None
