@@ -418,10 +418,15 @@ def distributor_detach_subscriptions(uuid, login, password, url, maxtries=20, su
     return req
 
 
-def distributor_download_manifest(uuid, login, password, url):
+def distributor_download_manifest(uuid, login, password, url, maxtries=20):
     """ Download manifest """
     session = portal_login(login, password, url)
-    req1 = session.get(url + "/management/distributors/%s/certificate/manifestdownload?" % uuid, verify=False, headers={'Accept-Language': 'en-US'})
+    ntry = 0
+    while ntry < maxtries:
+        req1 = session.get(url + "/management/distributors/%s/certificate/manifestdownload?" % uuid, verify=False, headers={'Accept-Language': 'en-US'})
+        if req1.status_code == 200:
+            break
+        ntry += 1
     assert req1.status_code == 200
     tf = tempfile.NamedTemporaryFile(delete=False, suffix=".zip")
     tf.write(req1.content)
