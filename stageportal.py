@@ -19,13 +19,14 @@ logging.basicConfig(format=FORMAT)
 logger = logging.getLogger("python-stageportal")
 logger.setLevel(logging.INFO)
 
+
 class StagePortal(object):
-    api_url="http://example.com/svcrest"
-    candlepin_url="https://subs.example.com"
-    portal_url="https://access.example.com"
+    api_url = "http://example.com/svcrest"
+    candlepin_url = "https://subs.example.com"
+    portal_url = "https://access.example.com"
     maxtries = 20
 
-    def __init__(self, api_url=None, candlepin_url=None, portal_url=None, maxtries = 20):
+    def __init__(self, api_url=None, candlepin_url=None, portal_url=None, maxtries=20):
         self.api_url = api_url
         self.candlepin_url = candlepin_url
         self.portal_url = portal_url
@@ -173,7 +174,6 @@ class StagePortal(object):
         order = requests.put(url, headers={"Content-Type": 'application/json'}, data=json.dumps(data)).json()
         regNumber = order['regNumbers'][0][0]['regNumber']
         return self.activate(regNumber, start_date, login)
-
 
     def portal_login(self, login, password):
         """ Perform portal login, accept terms if needed """
@@ -520,7 +520,7 @@ if __name__ == '__main__':
         api = None
 
     if 'candlepin' in args:
-        candlepin = args.candlepin.replace("https://","")
+        candlepin = args.candlepin.replace("https://", "")
     else:
         candlepin = None
 
@@ -552,7 +552,7 @@ if __name__ == '__main__':
                 distributor_uuid = sp.distributor_get_uuid(args.distributor_name, args.login, args.password)
             else:
                 distributor_uuid = args.distributor_uuid
-        if res == None and distributor_uuid is None:
+        if res is None and distributor_uuid is None:
             pass
         elif args.action == 'distributor_available_subscriptions':
             subs = sp.distributor_available_subscriptions(distributor_uuid, args.login, args.password)
