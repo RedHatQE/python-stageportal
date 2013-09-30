@@ -20,7 +20,7 @@ class StagePortal(object):
     portal_url="https://access.example.com"
     maxtries = 20
 
-    def __init__(self, api_url, candlepin_url, portal_url, maxtries = 20):
+    def __init__(self, api_url=None, candlepin_url=None, portal_url=None, maxtries = 20):
         self.api_url = api_url
         self.candlepin_url = candlepin_url
         self.portal_url = portal_url
@@ -363,35 +363,35 @@ if __name__ == '__main__':
 
     argparser.add_argument('--action', required=True,
                            help='Requested action', choices=ALL_ACTIONS)
-    argparser.add_argument('--api', required=True, help='The URL to the stage portal\'s API.')
+    argparser.add_argument('--login', required=True, help='User login')
     argparser.add_argument('--portal', required=True, help='The URL to the stage portal.')
-    argparser.add_argument('--candlepin', required=True, help='The URL to the stage portal\'s Candlepin.')
 
     [args, ignored_args] = argparser.parse_known_args()
 
-    argparser.add_argument('--login', required=True, help='User login')
+    if args.action in ['user_create', 'user_get', 'sku_add']:
+        argparser.add_argument('--api', required=True, help='The URL to the stage portal\'s API.')
+        if args.action == 'sku_add':
+            argparser.add_argument('--sku-id', required=True, help='SKU id to add')
+            argparser.add_argument('--sku-quantity', required=True, help='SKU quantity to add')
+            argparser.add_argument('--sku-start-date', required=True, help='SKU start date')
+    if args.action in DIST_ACTIONS:
+        argparser.add_argument('--candlepin', required=True, help='The URL to the stage portal\'s Candlepin.')
+        if args.action == 'distributor_create':
+            argparser.add_argument('--distributor-name', required=True, help='Distributor name')
+        else:
+            argparser.add_argument('--distributor-name', required=False, help='Distributor name')
+            argparser.add_argument('--distributor-uuid', required=False, help='Distributor uuid')
+
+        if args.action == 'distributor_add_subscriptions':
+            argparser.add_argument('--all', required=False, action='store_true', default=False, help='attach all available subscriptions')
+            argparser.add_argument('--sub-id', required=False, help='sub id to attach to distributor')
+            argparser.add_argument('--sub-quantity', required=False, help='sub quantity to attach to distributor')
+
+        if args.action == 'distributor_detach_subscriptions':
+            argparser.add_argument('--sub-ids', required=True, nargs='+', help='sub ids to detach from distributor (space separated list)')
 
     if not args.action in PWLESS_ACTIONS:
         argparser.add_argument('--password', required=True, help='User password')
-
-    if args.action == 'sku_add':
-        argparser.add_argument('--sku-id', required=True, help='SKU id to add')
-        argparser.add_argument('--sku-quantity', required=True, help='SKU quantity to add')
-        argparser.add_argument('--sku-start-date', required=True, help='SKU start date')
-
-    if args.action == 'distributor_create':
-        argparser.add_argument('--distributor-name', required=True, help='Distributor name')
-    elif args.action in DIST_ACTIONS:
-        argparser.add_argument('--distributor-name', required=False, help='Distributor name')
-        argparser.add_argument('--distributor-uuid', required=False, help='Distributor uuid')
-
-    if args.action == 'distributor_add_subscriptions':
-        argparser.add_argument('--all', required=False, action='store_true', default=False, help='attach all available subscriptions')
-        argparser.add_argument('--sub-id', required=False, help='sub id to attach to distributor')
-        argparser.add_argument('--sub-quantity', required=False, help='sub quantity to attach to distributor')
-
-    if args.action == 'distributor_detach_subscriptions':
-        argparser.add_argument('--sub-ids', required=True, nargs='+', help='sub ids to detach from distributor (space separated list)')
 
     [args, ignored_args] = argparser.parse_known_args()
 
@@ -399,7 +399,22 @@ if __name__ == '__main__':
         sys.stderr.write('You should specify --sub-id and --sub-quantity to attach specified subscription or use --all to attach all available subscriptions\n')
         sys.exit(1)
 
-    sp = StagePortal(args.api, args.candlepin.replace("https://",""), args.portal)
+    if 'api' in args:
+        api = args['api']
+    else:
+        api = None
+
+    if 'candlepin' in args:
+        candlepin = args.candlepin.replace("https://","")
+    else:
+        candlepin = None
+
+    if 'portal' in args:
+        portal = args.portal
+    else:
+        portal = None
+
+    sp = StagePortal(api_url=api, candlepin_url=candlepin, portal_url=portal)
 
     if args.action == 'user_create':
         res = sp.create_user(args.login, args.password)
@@ -409,10 +424,9 @@ if __name__ == '__main__':
         res = sp.hock_sku(args.login, args.sku_id, args.sku_quantity, args.sku_start_date)
     elif args.action in DIST_ACTIONS:
         # protect against 'you need to accept terms'
-        session = sp.portal_login(args.login, args.password)
-
+        if portal is not None:
+            session = sp.portal_login(args.login, args.password)
         res = None
-
         if args.action == 'distributor_create':
             res = sp.create_distributor(args.distributor_name, args.login, args.password)
         else:
