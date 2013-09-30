@@ -575,8 +575,7 @@ if __name__ == '__main__':
         # protect against 'you need to accept terms'
         if portal is not None:
             session = sp.portal_login(args.login, args.password)
-        systems = sp.create_systems(args.login, args.password, args.csv, args.entitlement_dir)
-        res = pprint.pformat(systems)
+        res = sp.create_systems(args.login, args.password, args.csv, args.entitlement_dir)
     else:
         sys.stderr.write('Unknown action: %s\n' % args.action)
         sys.exit(1)
