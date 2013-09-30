@@ -10,453 +10,341 @@ import argparse
 import sys
 import time
 import pprint
+from rhsm import connection
 from BeautifulSoup import BeautifulSoup
 
 
-def get_user(login, api_url):
-    """ Get portal user """
+class StagePortal(object):
+    api_url="http://example.com/svcrest"
+    candlepin_url="https://subs.example.com"
+    portal_url="https://access.example.com"
+    maxtries = 20
 
-    url = "%s/user/v3/login=%s" % (api_url, login)
+    def __init__(self, api_url, candlepin_url, portal_url, maxtries = 20):
+        self.api_url = api_url
+        self.candlepin_url = candlepin_url
+        self.portal_url = portal_url
+        self.maxtries = maxtries
 
-    user = requests.get(url).json()
-    if len(user) > 0:
-        return user[0]['customer']['id']
-    else:
-        return None
+    def get_user(self, login):
+        """ Get portal user """
 
+        url = "%s/user/v3/login=%s" % (self.api_url, login)
 
-def create_user(login, password, api_url, maxtries=20):
-    """ Create portal user """
-
-    url = "%s/user/v3/create" % api_url
-
-    newuser = {"login": login,
-               "loginUppercase": login.upper(),
-               "password": password,
-               "system": "WEB",
-               "userType": "P",
-               "personalInfo": {"phoneNumber": "1234567890",
-                                "email": "dev-null@redhat.com",
-                                "firstName": login,
-                                "lastName": "User",
-                                "greeting": "Mr."},
-               "personalSite": {"siteType": "MARKETING",
-                                "address": {"address1": "1801 Varsity Dr.",
-                                            "city": "Raleigh",
-                                            "state": "NC",
-                                            "county": "Wake",
-                                            "countryCode": "US",
-                                            "postalCode": "27606"}}}
-    ntry = 0
-    id = None
-    while True:
-        req = requests.post(url, headers={"Content-Type": 'application/json'}, data=json.dumps(newuser)).content
-        try:
-            id = int(req)
-            break
-        except ValueError:
-            sys.stderr.write(req + "\n")
-            pass
-        ntry += 1
-        if ntry > maxtries:
-            break
-    return id
-
-
-def activate(regNumber, start_date, login, api_url):
-    """ Activate regNumber """
-
-    url = "%s/activation/v2/activate" % api_url
-
-    webCustomerId = get_user(login, api_url)
-    data = {"activationKey": regNumber,
-            "vendor": "REDHAT",
-            "startDate": start_date,
-            "userName": login,
-            "webCustomerId": webCustomerId,
-            "systemName": "genie"
-            }
-    return requests.post(url,
-                         headers={"Content-Type": 'application/json'},
-                         data=json.dumps(data)).json()['id']
-
-
-def hock_sku(login, SKU, quantity, start_date, api_url):
-    """ Place an order """
-    url = "%s/regnum/v5/hock/order" % api_url
-
-    data = {"regnumType": "entitlement",
-            "satelliteVersion": "",
-            "login": login,
-            "vendor": "REDHAT",
-            "sendMail": False,
-            "notifyVendor": False,
-            "header": {"companyName": "",
-                       "customerNumber": 1234567890,
-                       "customerContactName": "Hockeye",
-                       "customerContactEmail": "dev-null@redhat.com",
-                       "customerRhLoginId": "qa@redhat.com",
-                       "opportunityNumber": 0,
-                       "emailType": "ENGLISH",
-                       "industry": "Software",
-                       "salesRepName": "Salesguy",
-                       "salesRepEmail": "dev-null@redhat.com",
-                       "rhPartnerDevMgrName": "DevManager",
-                       "rhPartnerDevMgrEmail": "dev-null@redhat.com",
-                       "partnerClassification": "",
-                       "classificationOther": "",
-                       "promocode": "",
-                       "revPublication": "",
-                       "rhManagerName": "Manager",
-                       "rhManagerEmail": "dev-null@redhat.com",
-                       "yourHockerName": "Genie",
-                       "yourHockerEmail": "dev-null@redhat.com",
-                       "publicationTitle": "",
-                       "publisher": "",
-                       "expectedPublicationDate": "",
-                       "program": {"id": 1,
-                                   "shortName": "PRODUCTION",
-                                   "name": "Production Hock",
-                                   "description": "Product Code Creation for Subscription Operations",
-                                   "active": True,
-                                   "quota": 100,
-                                   "group": "staff:pm:hock",
-                                   "bccEmails": "dev-null@redhat.com",
-                                   "addtEmails": "dev-null@redhat.com"}},
-            "lines": [{"productSKU": SKU,
-                       "serviceTagHashed": False,
-                       "additionalEmails": [],
-                       "ccList": [],
-                       "bccList": [],
-                       "numSuperRegnums": 1,
-                       "lineItem": {"sku": SKU,
-                                    "opUnit": "",
-                                    "quantity": quantity,
-                                    "zuper": True,
-                                    "replicator": {"replicatorId": 30},
-                                    "reason": {"id": "14"},
-                                    "subject": "",
-                                    "comments": "",
-                                    "completed": False,
-                                    "renew": False,
-                                    "entitlementStartDate": start_date,
-                                    "satelliteVersion": "",
-                                    "poNumber": "",
-                                    "salesOrderNumber": "",
-                                    "emailCc": "",
-                                    "emailBcc": "",
-                                    "emailType": "ENDUSER",
-                                    "recipient": "",
-                                    "webContactId": "",
-                                    "groupIdentifier": "",
-                                    "duration": "1 year",
-                                    "opUnitId": 103,
-                                    "userAcctNumber": "",
-                                    "partnerAcctNumber": "",
-                                    "replicatorAcctNumber": ""}}]}
-
-    order = requests.put(url, headers={"Content-Type": 'application/json'}, data=json.dumps(data)).json()
-    regNumber = order['regNumbers'][0][0]['regNumber']
-    return activate(regNumber, start_date, login, api_url)
-
-
-def portal_login(login, password, url, maxtries=20):
-    """ Perform portal login, accept terms if needed """
-
-    if url.startswith("https://access."):
-        url = "https://www." + url[15:]
-    url += '/wapps/sso/login.html'
-
-    ntry = 0
-    while ntry < maxtries:
-        ntry += 1
-        s = requests.session()
-        s.verify = False
-
-        req1 = s.post(url,
-                      data={'_flowId': 'legacy-login-flow', 'failureRedirect': url,
-                            'username': login, 'password': password},
-                      headers={'Accept-Language': 'en-US'})
-        if req1.status_code != 200:
-            continue
-        if req1.content.find('Welcome&nbsp;' + login) == -1:
-            # Accepting terms
-            req2 = s.post(url, params={'_flowId': 'legacy-login-flow', '_flowExecutionKey': 'e1s1'},
-                          data={'accepted': 'true', '_accepted': 'on', 'optionalTerms_28': 'accept', '_eventId_submit': 'Continue', '_flowExecutionKey': 'e1s1', 'redirect': ''})
-            if req2.status_code != 200:
-                continue
-            if req2.content.find('Open Source Assurance Agreement Acceptance Confirmation') != -1 or req2.content.find('Welcome&nbsp;' + login) != -1:
-                ntry = 0
-                break
+        user = requests.get(url).json()
+        if len(user) > 0:
+            return user[0]['customer']['id']
         else:
-            break
+            return None
 
-    assert ntry < maxtries
-    return s
+    def create_user(self, login, password):
+        """ Create portal user """
 
+        url = "%s/user/v3/create" % self.api_url
 
-def check_subscriptions(uid_list, login, password, url, maxtries=20):
-    """ Check subscription status """
-    session = portal_login(login, password, url)
-    assert session is not None
-    ntry = 0
-    for uid in uid_list:
+        newuser = {"login": login,
+                   "loginUppercase": login.upper(),
+                   "password": password,
+                   "system": "WEB",
+                   "userType": "P",
+                   "personalInfo": {"phoneNumber": "1234567890",
+                                    "email": "dev-null@redhat.com",
+                                    "firstName": login,
+                                    "lastName": "User",
+                                    "greeting": "Mr."},
+                   "personalSite": {"siteType": "MARKETING",
+                                    "address": {"address1": "1801 Varsity Dr.",
+                                                "city": "Raleigh",
+                                                "state": "NC",
+                                                "county": "Wake",
+                                                "countryCode": "US",
+                                                "postalCode": "27606"}}}
+        ntry = 0
+        id = None
         while True:
-            req1 = session.get(url + "/wapps/support/protected/details.html", params={'subscriptionId': uid}, verify=False, headers={'Accept-Language': 'en-US'})
-            bs = BeautifulSoup(req1.content)
+            req = requests.post(url, headers={"Content-Type": 'application/json'}, data=json.dumps(newuser)).content
             try:
-                if len(bs.findAll("table")[0].findAll("td")) > 0:
-                    # subscription is present
-                    break
-            except:
+                id = int(req)
+                break
+            except ValueError:
+                sys.stderr.write(req + "\n")
                 pass
             ntry += 1
-            if ntry > maxtries:
-                return None
-    return True
+            if ntry > self.maxtries:
+                break
+        return id
+
+    def activate(self, regNumber, start_date, login):
+        """ Activate regNumber """
+
+        url = "%s/activation/v2/activate" % self.api_url
+
+        webCustomerId = self.get_user(login)
+        data = {"activationKey": regNumber,
+                "vendor": "REDHAT",
+                "startDate": start_date,
+                "userName": login,
+                "webCustomerId": webCustomerId,
+                "systemName": "genie"
+                }
+        return requests.post(url,
+                             headers={"Content-Type": 'application/json'},
+                             data=json.dumps(data)).json()['id']
+
+    def hock_sku(self, login, SKU, quantity, start_date):
+        """ Place an order """
+        url = "%s/regnum/v5/hock/order" % self.api_url
+
+        data = {"regnumType": "entitlement",
+                "satelliteVersion": "",
+                "login": login,
+                "vendor": "REDHAT",
+                "sendMail": False,
+                "notifyVendor": False,
+                "header": {"companyName": "",
+                           "customerNumber": 1234567890,
+                           "customerContactName": "Hockeye",
+                           "customerContactEmail": "dev-null@redhat.com",
+                           "customerRhLoginId": "qa@redhat.com",
+                           "opportunityNumber": 0,
+                           "emailType": "ENGLISH",
+                           "industry": "Software",
+                           "salesRepName": "Salesguy",
+                           "salesRepEmail": "dev-null@redhat.com",
+                           "rhPartnerDevMgrName": "DevManager",
+                           "rhPartnerDevMgrEmail": "dev-null@redhat.com",
+                           "partnerClassification": "",
+                           "classificationOther": "",
+                           "promocode": "",
+                           "revPublication": "",
+                           "rhManagerName": "Manager",
+                           "rhManagerEmail": "dev-null@redhat.com",
+                           "yourHockerName": "Genie",
+                           "yourHockerEmail": "dev-null@redhat.com",
+                           "publicationTitle": "",
+                           "publisher": "",
+                           "expectedPublicationDate": "",
+                           "program": {"id": 1,
+                                       "shortName": "PRODUCTION",
+                                       "name": "Production Hock",
+                                       "description": "Product Code Creation for Subscription Operations",
+                                       "active": True,
+                                       "quota": 100,
+                                       "group": "staff:pm:hock",
+                                       "bccEmails": "dev-null@redhat.com",
+                                       "addtEmails": "dev-null@redhat.com"}},
+                "lines": [{"productSKU": SKU,
+                           "serviceTagHashed": False,
+                           "additionalEmails": [],
+                           "ccList": [],
+                           "bccList": [],
+                           "numSuperRegnums": 1,
+                           "lineItem": {"sku": SKU,
+                                        "opUnit": "",
+                                        "quantity": quantity,
+                                        "zuper": True,
+                                        "replicator": {"replicatorId": 30},
+                                        "reason": {"id": "14"},
+                                        "subject": "",
+                                        "comments": "",
+                                        "completed": False,
+                                        "renew": False,
+                                        "entitlementStartDate": start_date,
+                                        "satelliteVersion": "",
+                                        "poNumber": "",
+                                        "salesOrderNumber": "",
+                                        "emailCc": "",
+                                        "emailBcc": "",
+                                        "emailType": "ENDUSER",
+                                        "recipient": "",
+                                        "webContactId": "",
+                                        "groupIdentifier": "",
+                                        "duration": "1 year",
+                                        "opUnitId": 103,
+                                        "userAcctNumber": "",
+                                        "partnerAcctNumber": "",
+                                        "replicatorAcctNumber": ""}}]}
+
+        order = requests.put(url, headers={"Content-Type": 'application/json'}, data=json.dumps(data)).json()
+        regNumber = order['regNumbers'][0][0]['regNumber']
+        return self.activate(regNumber, start_date, login)
 
 
-def create_distributor(name, login, password, url, candlepin_url, maxtries=20):
-    """ Create new distributor on portal"""
-    ntry = 0
-    while ntry < maxtries:
-        ntry += 1
-        session = portal_login(login, password, url)
-        req1 = session.get(url + "/management/distributors/", verify=False, headers={'Accept-Language': 'en-US'})
-        if req1.status_code != 200:
-            continue
-        req2 = session.get(url + "/management/distributor/distributors/create/sam", verify=False, headers={'Accept-Language': 'en-US'})
-        if req2.status_code != 200:
-            continue
-        auth_token_search = re.search(".*name=\"authenticity_token\" type=\"hidden\" value=\"(.*=)\"", req2.content)
-        if auth_token_search is not None:
-            auth_token = auth_token_search.group(1)
-        else:
-            time.sleep(5)
-            continue
-        data = {"authenticity_token": auth_token,
-                "distributor[consumer_type]": "sam", "distributor[name]": name,
-                "commit": "Register",
-                "asp_charset": "iso-8859-1"}
-        req3 = session.post(url + "/management/distributor/distributors/create/sam", verify=False, headers={'Accept-Language': 'en-US'}, data=data)
-        if req3.status_code != 200:
-            continue
-        # returning UUID
-        uuid = req3.request.path_url.replace("/management/distributors/", "")
-        # hackaround candlepin
-        #req4 = requests.put(candlepin_url + "/subscription/consumers/%s" % uuid,
-        #                    data='{"facts":{"system.certificate_version":"3.2"}}',
-        #                    headers={'Content-Type': 'application/json'},
-        #                    verify=False, auth=(login, password))
-        #if req4.status_code != 204:
-        #    continue
-        req4 = requests.put(candlepin_url + "/subscription/consumers/%s" % uuid,
-                            data='{"facts":{"distributor_version":"sam-1.3"}}',
-                            headers={'Content-Type': 'application/json'},
-                            verify=False, auth=(login, password))
-        if req4.status_code != 204:
-            continue
-        #req5 = requests.put(candlepin_url + "/subscription/consumers/%s" % uuid,
-        #                    data='{"capabilities":[{"name":"cores"},{"name":"ram"},{"name":"instance_multiplier"},{"name":"cert_v3"}]}',
-        #                    headers={'Content-Type': 'application/json'},
-        #                    verify=False, auth=(login, password))
-        #if req5.status_code != 204:
-        #    continue
-        return uuid
-    assert ntry < maxtries
+    def portal_login(self, login, password):
+        """ Perform portal login, accept terms if needed """
+        url = self.portal_url
 
+        if url.startswith("https://access."):
+            url = "https://www." + url[15:]
+        url += '/wapps/sso/login.html'
 
-def _distributor_auth_token(uuid, login, password, url):
-    """ Get 'distributor' page content and auth token """
-    session = portal_login(login, password, url)
-    req = session.get(url + "/management/distributors/%s" % uuid, verify=False, headers={'Accept-Language': 'en-US'})
-    if req.status_code != 200:
-        return None, None, None
-    search = re.search(".*name=\"authenticity_token\" type=\"hidden\" value=\"(.*=)\"", req.content)
-    if search is None:
-        return None, None, None
-    return session, req.content, search.group(1)
-
-
-def distributor_available_subscriptions(uuid, login, password, url, maxtries=20, expected_subs_count=None):
-    """ Get all attachable subs for distributor """
-    ntry = 0
-    subscriptions = []
-    while True:
-        if ntry > maxtries:
-            # no more tries left
-            break
-        (_, content, auth_token) = _distributor_auth_token(uuid, login, password, url)
-        if auth_token is None:
+        ntry = 0
+        while ntry < self.maxtries:
             ntry += 1
-            continue
-        subscriptions = []
-        bs = BeautifulSoup(content)
-        for tag in bs.findAll('tr'):
-            if tag.findAll('select') != []:
-                try:
-                    (_id, quantity) = re.findall("quantity\[([0-9,a-f]+)\]\">.*<option value=\"([0-9]+)\" selected", str(tag.findAll('select')), re.DOTALL)[0]
-                except IndexError:
+            s = requests.session()
+            s.verify = False
+
+            req1 = s.post(url,
+                          data={'_flowId': 'legacy-login-flow', 'failureRedirect': url,
+                                'username': login, 'password': password},
+                          headers={'Accept-Language': 'en-US'})
+            if req1.status_code != 200:
+                continue
+            if req1.content.find('Welcome&nbsp;' + login) == -1:
+                # Accepting terms
+                req2 = s.post(url, params={'_flowId': 'legacy-login-flow', '_flowExecutionKey': 'e1s1'},
+                              data={'accepted': 'true', '_accepted': 'on', 'optionalTerms_28': 'accept', '_eventId_submit': 'Continue', '_flowExecutionKey': 'e1s1', 'redirect': ''})
+                if req2.status_code != 200:
                     continue
-                name = None
-                date1 = None
-                date2 = None
-                for td in tag.findAll('td'):
-                    if str(td).find('"subscription"') != -1:
-                        name = td.text
-                    if str(td).find('"date"') != -1:
-                        if date1 is None:
-                            date1 = td.text
-                        else:
-                            date2 = td.text
-                subscriptions.append({'id': _id,
-                                      'name': name,
-                                      'quantity': quantity,
-                                      'date_start': date1, 'date_end': date2})
-        if expected_subs_count is None or len(subscriptions) >= expected_subs_count:
-            # all required subscriptions are found
-            break
-        ntry += 1
-    return subscriptions
+                if req2.content.find('Open Source Assurance Agreement Acceptance Confirmation') != -1 or req2.content.find('Welcome&nbsp;' + login) != -1:
+                    ntry = 0
+                    break
+            else:
+                break
 
+        assert ntry < self.maxtries, "Failed to login to portal after %s tries" % self.maxtries
+        return s
 
-def distributor_attached_subscriptions(uuid, login, password, url, maxtries=20):
-    """ Get all already attached subs for distributor """
-    ntry = 0
-    subscriptions = []
-    while True:
-        if ntry > maxtries:
-            # no more tries left
-            break
-        (_, content, auth_token) = _distributor_auth_token(uuid, login, password, url)
-        if auth_token is None:
+    def check_subscriptions(self, uid_list, login, password):
+        """ Check subscription status """
+        url = self.portal_url
+        session = self.portal_login(login, password)
+        assert session is not None
+        ntry = 0
+        for uid in uid_list:
+            while True:
+                req1 = session.get(url + "/wapps/support/protected/details.html", params={'subscriptionId': uid}, verify=False, headers={'Accept-Language': 'en-US'})
+                bs = BeautifulSoup(req1.content)
+                try:
+                    if len(bs.findAll("table")[0].findAll("td")) > 0:
+                        # subscription is present
+                        break
+                except:
+                    pass
+                ntry += 1
+                if ntry > self.maxtries:
+                    return None
+        return True
+
+    def create_distributor(self, name, login, password, distributor_version='sam-1.3'):
+        """ Create new distributor on portal"""
+        con = connection.UEPConnection(self.candlepin_url, username=login, password=password)
+        con.ping()
+        distributor = con.registerConsumer(name=name, type={'id': '5', 'label': 'sam', 'manifest': True}, facts={'distributor_version': distributor_version})
+        return distributor['uuid']
+
+    def distributor_available_subscriptions(self, uuid, login, password, expected_subs_count=None):
+        """ Get available/attached subscriptions """
+        con = connection.UEPConnection(self.candlepin_url, username=login, password=password)
+        con.ping()
+        ntry = 0
+        while True:
+            subscriptions = []
+            owners = con.getOwnerList(login)
+            for own in owners:
+                pools = con.getPoolsList(owner=own['key'])
+                for pool in pools:
+                    count = pool['quantity'] - pool['consumed']
+                    if 'subscriptionSubKey' in pool and pool['subscriptionSubKey'] == 'derived':
+                        # skip derived pools
+                        continue
+                    if count > 0:
+                        subscriptions.append({'id': pool['id'],
+                                              'name': pool['productName'],
+                                              'quantity': count,
+                                              'date_start': pool['startDate'],
+                                              'date_end': pool['endDate']})
+            if expected_subs_count is None or len(subscriptions) >= expected_subs_count:
+                return subscriptions
+            if ntry >= self.maxtries:
+                return None
             ntry += 1
-            continue
+
+    def distributor_attached_subscriptions(self, uuid, login, password):
+        """ Get available/attached subscriptions """
+        con = connection.UEPConnection(self.candlepin_url, username=login, password=password)
+        con.ping()
         subscriptions = []
-        bs = BeautifulSoup(content)
-        for tag in bs.findAll('tr'):
-            if tag.findAll('td', {'class': 'subscription'}) != [] and tag.findAll('option') == []:
-                name = tag.findAll('td', {'class': 'subscription'})[0].getText()
-                quantity = tag.findAll('td', {'class': 'quantity'})[1].getText()
-                date = tag.findAll('td', {'class': 'date'})[0].getText()
-                _id = re.findall('value="([0-9,a-f]*)"', str(tag.findAll('td', {'class': 'select'})[0]))[0]
-                subscriptions.append({'id': _id,
-                                      'name': name,
-                                      'quantity': quantity,
-                                      'date_end': date})
-        break
-    return subscriptions
+        ntry = 0
+        entitlements = con.getEntitlementList(consumerId=uuid)
+        for entitlement in entitlements:
+            serials = []
+            for cert in entitlement['certificates']:
+                serials.append(cert['serial']['serial'])
+            pool = entitlement['pool']
+            subscriptions.append({'id': pool['id'],
+                                  'name': pool['productName'],
+                                  'quantity': pool['consumed'],
+                                  'date_start': pool['startDate'],
+                                  'date_end': pool['endDate'],
+                                  'serials': serials})
+        return subscriptions
 
+    def distributor_attach_everything(self, uuid, login, password, subs_count=1):
+        """ Attach all available subscriptions to distributor """
+        return self.distributor_attach_subscriptions(uuid, login, password, subs_count=subs_count, subscriptions=None)
 
-def distributor_attach_everything(uuid, login, password, url, maxtries=20, subs_count=1):
-    """ Attach all available subscriptions to distributor """
-    return distributor_attach_subscriptions(uuid, login, password, url, maxtries=20, subs_count=subs_count, subscriptions=None)
-
-
-def distributor_attach_subscriptions(uuid, login, password, url, maxtries=20, subs_count=1, subscriptions=None):
-    """ Attach subscriptions to distributor """
-    if subscriptions is None:
-        subscriptions = distributor_available_subscriptions(uuid, login, password, url, maxtries, subs_count)
-    assert subscriptions != [], "Nothing to attach"
-    assert len(subscriptions) >= subs_count, "Can't attach %s subscriptions" % subs_count
-
-    ntry = 0
-    req = None
-    while ntry < maxtries:
-        if ntry > maxtries:
-            # no more tries left
-            break
-
-        (session, _, auth_token) = _distributor_auth_token(uuid, login, password, url)
-        if auth_token is None:
-            ntry += 1
-            continue
-
-        data = {"authenticity_token": auth_token,
-                "stype": "match",
-                "checkall_avail": 0,
-                "checkgroup[]": [],
-                "commit": "Attach Selected"}
+    def distributor_attach_subscriptions(self, uuid, login, password, subs_count=1, subscriptions=None):
+        """ Attach subscriptions to distributor """
+        con = connection.UEPConnection(self.candlepin_url, username=login, password=password)
+        con.ping()
+        if subscriptions is None:
+            subscriptions = self.distributor_available_subscriptions(uuid, login, password, subs_count)
+        assert subscriptions != [], "Nothing to attach"
+        assert len(subscriptions) >= subs_count, "Can't attach %s subscriptions" % subs_count
         for sub in subscriptions:
-            data["checkgroup[]"].append(sub['id'])
-            data["quantity[%s]" % sub['id']] = sub['quantity']
-        req = session.post(url + "/management/distributors/%s/bind/selected" % uuid, verify=False, headers={'Accept-Language': 'en-US'}, data=data)
-        if req.status_code != 200:
+            bind = con.bindByEntitlementPool(uuid, sub['id'], sub['quantity'])
+            assert bind is not None
+        return []
+
+    def distributor_detach_subscriptions(self, uuid, login, password, subscriptions=[]):
+        """ Detach subscriptions from distributor """
+        detach_serials = []
+        detach_subs = []
+        attached_subs = self.distributor_attached_subscriptions(uuid, login, password)
+        for sub in attached_subs:
+            if sub['id'] in subscriptions:
+                # this sub should be detached
+                detach_serials += sub['serials']
+                detach_subs.append(sub['id'])
+        diff = list(set(subscriptions) - set(detach_subs))
+        assert len(diff) == 0, "Can't detach subs: %s" % diff
+        con = connection.UEPConnection(self.candlepin_url, username=login, password=password)
+        for serial in detach_serials:
+            con.unbindBySerial(uuid, serial)
+        return []
+
+    def distributor_download_manifest(self, uuid, login, password):
+        """ Download manifest """
+        session = self.portal_login(login, password)
+        ntry = 0
+        while ntry < self.maxtries:
+            req1 = session.get(self.portal_url + "/management/distributors/%s/certificate/manifestdownload?" % uuid, verify=False, headers={'Accept-Language': 'en-US'})
+            if req1.status_code == 200:
+                break
             ntry += 1
-            continue
+        assert req1.status_code == 200
+        tf = tempfile.NamedTemporaryFile(delete=False, suffix=".zip")
+        tf.write(req1.content)
+        tf.close()
+        return tf.name
+
+    def distributor_get_uuid(self, name, login, password):
+        """ Get distributor uuid """
+        session = self.portal_login(login, password)
+        req1 = session.get(self.portal_url + "/management/distributors", verify=False, headers={'Accept-Language': 'en-US'})
+        assert req1.status_code == 200
+        m = re.search("/distributors/([0-9,a-f,-]*)\">" + name + "<", req1.content, re.DOTALL)
+        if m is not None:
+            return m.group(1)
         else:
-            break
-    return req
+            return None
 
+    def delete_distributor(self, uuid, login, password):
+        """ Delete distributor """
+        con = connection.UEPConnection(self.candlepin_url, username=login, password=password)
+        return con.unregisterConsumer(uuid)
 
-def distributor_detach_subscriptions(uuid, login, password, url, maxtries=20, subscriptions=None):
-    """ Detach subscriptions from distributor """
-    ntry = 0
-    req = None
-    while ntry < maxtries:
-        if ntry > maxtries:
-            # no more tries left
-            break
-
-        (session, _, auth_token) = _distributor_auth_token(uuid, login, password, url)
-        if auth_token is None:
-            ntry += 1
-            continue
-
-        data = {"authenticity_token": auth_token,
-                "stype": "match",
-                "checkgroup[]": [],
-                "commit": "Attach Selected"}
-        for sub in subscriptions:
-            data["checkgroup[]"].append(sub)
-        req = session.post(url + "/management/distributors/%s/unbind/selected" % uuid, verify=False, headers={'Accept-Language': 'en-US'}, data=data)
-        if req.status_code != 200:
-            ntry += 1
-            continue
-        else:
-            break
-    return req
-
-
-def distributor_download_manifest(uuid, login, password, url, maxtries=20):
-    """ Download manifest """
-    session = portal_login(login, password, url)
-    ntry = 0
-    while ntry < maxtries:
-        req1 = session.get(url + "/management/distributors/%s/certificate/manifestdownload?" % uuid, verify=False, headers={'Accept-Language': 'en-US'})
-        if req1.status_code == 200:
-            break
-        ntry += 1
-    assert req1.status_code == 200
-    tf = tempfile.NamedTemporaryFile(delete=False, suffix=".zip")
-    tf.write(req1.content)
-    tf.close()
-    return tf.name
-
-
-def distributor_get_uuid(name, login, password, url):
-    """ Get distributor uuid """
-    session = portal_login(login, password, url)
-    req1 = session.get(url + "/management/distributors", verify=False, headers={'Accept-Language': 'en-US'})
-    assert req1.status_code == 200
-    m = re.search("/distributors/([0-9,a-f,-]*)\">" + name + "<", req1.content, re.DOTALL)
-    if m is not None:
-        return m.group(1)
-    else:
-        return None
-
-
-def delete_distributor(uuid, login, password, url):
-    """ Delete distributor """
-    session = portal_login(login, password, url)
-    req1 = session.get(url + "/management/distributors/%s" % uuid, verify=False, headers={'Accept-Language': 'en-US'})
-    assert req1.status_code == 200
-    auth_token = re.search(".*name=\"authenticity_token\" type=\"hidden\" value=\"(.*=)\"", req1.content).group(1)
-    data = {"authenticity_token": auth_token,
-            "_method": "delete"}
-    req2 = session.post(url + "/management/distributors/%s/delete" % uuid, verify=False, headers={'Accept-Language': 'en-US'}, data=data)
-    assert req2.status_code == 200
-    return req2
 
 if __name__ == '__main__':
 
@@ -511,41 +399,49 @@ if __name__ == '__main__':
         sys.stderr.write('You should specify --sub-id and --sub-quantity to attach specified subscription or use --all to attach all available subscriptions\n')
         sys.exit(1)
 
+    sp = StagePortal(args.api, args.candlepin.replace("https://",""), args.portal)
+
     if args.action == 'user_create':
-        res = create_user(args.login, args.password, args.api)
+        res = sp.create_user(args.login, args.password)
     elif args.action == 'user_get':
-        res = get_user(args.login, args.api)
+        res = sp.get_user(args.login)
     elif args.action == 'sku_add':
-        res = hock_sku(args.login, args.sku_id, args.sku_quantity, args.sku_start_date, args.api)
-    elif args.action == 'distributor_create':
-        res = create_distributor(args.distributor_name, args.login, args.password, args.portal, args.candlepin)
+        res = sp.hock_sku(args.login, args.sku_id, args.sku_quantity, args.sku_start_date)
     elif args.action in DIST_ACTIONS:
-        if args.distributor_name is None and args.distributor_uuid is None:
-            sys.stderr.write('You should specify --distributor-name or --distributor-uuid\n')
-            sys.exit(1)
-        if args.distributor_uuid is None:
-            distributor_uuid = distributor_get_uuid(args.distributor_name, args.login, args.password, args.portal)
+        # protect against 'you need to accept terms'
+        session = sp.portal_login(args.login, args.password)
+
+        res = None
+
+        if args.action == 'distributor_create':
+            res = sp.create_distributor(args.distributor_name, args.login, args.password)
         else:
-            distributor_uuid = args.distributor_uuid
-        if distributor_uuid is None:
-            res = None
+            if args.distributor_name is None and args.distributor_uuid is None:
+                sys.stderr.write('You should specify --distributor-name or --distributor-uuid\n')
+                sys.exit(1)
+            if args.distributor_uuid is None:
+                distributor_uuid = sp.distributor_get_uuid(args.distributor_name, args.login, args.password)
+            else:
+                distributor_uuid = args.distributor_uuid
+        if res == None and distributor_uuid is None:
+            pass
         elif args.action == 'distributor_available_subscriptions':
-            subs = distributor_available_subscriptions(distributor_uuid, args.login, args.password, args.portal)
+            subs = sp.distributor_available_subscriptions(distributor_uuid, args.login, args.password)
             res = pprint.pformat(subs)
         elif args.action == 'distributor_attached_subscriptions':
-            subs = distributor_attached_subscriptions(distributor_uuid, args.login, args.password, args.portal)
+            subs = sp.distributor_attached_subscriptions(distributor_uuid, args.login, args.password)
             res = pprint.pformat(subs)
         elif args.action == 'distributor_add_subscriptions':
             if args.all:
-                res = distributor_attach_everything(distributor_uuid, args.login, args.password, args.portal)
+                res = sp.distributor_attach_everything(distributor_uuid, args.login, args.password)
             else:
-                res = distributor_attach_subscriptions(distributor_uuid, args.login, args.password, args.portal, subscriptions=[{'id': args.sub_id, 'quantity': args.sub_quantity}])
+                res = sp.distributor_attach_subscriptions(distributor_uuid, args.login, args.password, subscriptions=[{'id': args.sub_id, 'quantity': args.sub_quantity}])
         elif args.action == 'distributor_detach_subscriptions':
-            res = distributor_detach_subscriptions(distributor_uuid, args.login, args.password, args.portal, subscriptions=args.sub_ids)
+            res = sp.distributor_detach_subscriptions(distributor_uuid, args.login, args.password, subscriptions=args.sub_ids)
         elif args.action == 'distributor_delete':
-            res = delete_distributor(distributor_uuid, args.login, args.password, args.portal)
+            res = sp.delete_distributor(distributor_uuid, args.login, args.password)
         elif args.action == 'distributor_get_manifest':
-            res = distributor_download_manifest(distributor_uuid, args.login, args.password, args.portal)
+            res = sp.distributor_download_manifest(distributor_uuid, args.login, args.password)
     else:
         sys.stderr.write('Unknown action: %s\n' % args.action)
         sys.exit(1)
