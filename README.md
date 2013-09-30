@@ -17,11 +17,11 @@ CLI usage example
 	2687709
 
 	# Creating distributor
-	$python stageportal.py --login samplecustomer01 --password changeme --api $API --portal $PORTAL --candlepin $CANDLEPIN --action distributor_create --distributor-name sam1
+	$python stageportal.py --login samplecustomer01 --password changeme --portal $PORTAL --candlepin $CANDLEPIN --action distributor_create --distributor-name sam1
 	c2f87b08-69da-4ed4-9995-b7c5b225d453
 	
 	# Listing subscriptions available for attaching to distributor
-	$python stageportal.py --login samplecustomer01 --password changeme --api $API --candlepin $CANDLEPIN --portal $PORTAL --action distributor_available_subscriptions --distributor-name sam1
+	$python stageportal.py --login samplecustomer01 --password changeme --candlepin $CANDLEPIN --portal $PORTAL --action distributor_available_subscriptions --distributor-name sam1
 	 [{'date_end': u'07/04/2014',
            'date_start': u'07/04/2013',
            'id': '8a99f9833fcdf2d0013ff1630d9255c3',
@@ -29,33 +29,44 @@ CLI usage example
            'quantity': '40'}]
 
 	# Attaching subscription to distributor
-	$python stageportal.py --login samplecustomer01 --password changeme --api $API --candlepin $CANDLEPIN --portal $PORTAL --action distributor_add_subscriptions --distributor-name sam1 --sub-id 8a99f9833fcdf2d0013ff1630d9255c3 --sub-quantity 10
+	$python stageportal.py --login samplecustomer01 --password changeme --candlepin $CANDLEPIN --portal $PORTAL --action distributor_add_subscriptions --distributor-name sam1 --sub-id 8a99f9833fcdf2d0013ff1630d9255c3 --sub-quantity 10
 	<Response [200]>
 
 	OR
 
 	# Attaching all available subscriptions to distributor
-	$python stageportal.py --login samplecustomer01 --password changeme --api $API --candlepin $CANDLEPIN --portal $PORTAL --action distributor_add_subscriptions --distributor-name sam1 --all
+	$python stageportal.py --login samplecustomer01 --password changeme --candlepin $CANDLEPIN --portal $PORTAL --action distributor_add_subscriptions --distributor-name sam1 --all
 	<Response [200]>
 
 	# Listing subscriptions already attached to distributor
-	$python stageportal.py --login samplecustomer01 --password changeme --api $API --candlepin $CANDLEPIN --portal $PORTAL --action distributor_attached_subscriptions --distributor-name sam1
+	$python stageportal.py --login samplecustomer01 --password changeme --candlepin $CANDLEPIN --portal $PORTAL --action distributor_attached_subscriptions --distributor-name sam1
 	[{'date_end': u'07/26/2014',
           'id': '8a99f98340a67e350140bf6d81d17064',
           'name': u'Red Hat Directory Server (Replica)',
           'quantity': u'6'}]
 
 	# Detaching subscriptions from distributor
-	$python stageportal.py --login samplecustomer01 --password changeme --api $API --candlepin $CANDLEPIN --portal $PORTAL --action distributor_detach_subscriptions --distributor-name sam1 --sub-ids 8a99f98340a67e350140bf6d92e77066
+	$python stageportal.py --login samplecustomer01 --password changeme --candlepin $CANDLEPIN --portal $PORTAL --action distributor_detach_subscriptions --distributor-name sam1 --sub-ids 8a99f98340a67e350140bf6d92e77066
 	<Response [200]>
 
 	# Downloading manifest
-	$python stageportal.py --login samplecustomer01 --password changeme --api $API --portal $PORTAL --candlepin $CANDLEPIN --action distributor_get_manifest --distributor-name sam1       
+	$python stageportal.py --login samplecustomer01 --password changeme --portal $PORTAL --candlepin $CANDLEPIN --action distributor_get_manifest --distributor-name sam1       
 	/tmp/tmpPivvXu.zip
 	
 	# Removing distributor
-	$python stageportal.py --login samplecustomer01 --password changeme --api $API --portal $PORTAL --candlepin $CANDLEPIN --action distributor_delete --distributor-name sam1
+	$python stageportal.py --login samplecustomer01 --password changeme ---portal $PORTAL --candlepin $CANDLEPIN --action distributor_delete --distributor-name sam1
 	<Response [200]>
+
+	# Registering systems
+	$python stageportal.py --login samplecustomer01 --password changeme --portal $PORTAL --candlepin $CANDLEPIN --action systems_register --csv systems.csv --entitlement-dir /tmp/entitlements
+	2013-09-30 15:57:40,108 INFO Sys one1 created with uid 9a921974-ded3-4839-8b6b-0fda3eb85b4e
+        2013-09-30 15:57:43,099 INFO Sys one2 created with uid 6fd4cee5-8be7-44ef-89fa-6874ef659c7
+	...
+	<Response [200]>
+	# CSV example:
+	Name,Count,Org Label,Environment Label,Groups,Virtual,Host,OS,Arch,Sockets,RAM,Cores,SLA,Products,Subscriptions
+	test_one%d,1,,,,N,,6Server,x86_64,1,4,,Standard,69|Red Hat Enterprise Linux Server,"RH0192098|Red Hat Enterprise Linux Server, Standard (1-2 sockets) (Unlimited guests)"
+	test_one1.vm%d,1,,,,Y,test_one1,6Server,x86_64,1,4,,Standard,69|Red Hat Enterprise Linux Server,"RH0192098|Red Hat Enterprise Linux Server, Standard (1-2 sockets) (Unlimited guests)"
 
 Contact
 -------
