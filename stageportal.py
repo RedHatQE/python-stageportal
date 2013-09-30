@@ -1,6 +1,5 @@
 #!/usr/bin/env python
 # -*- encoding: utf-8 -*-
-# vim: ts=4 sw=4 expandtab ai
 
 import requests
 import json
@@ -10,9 +9,15 @@ import argparse
 import sys
 import time
 import pprint
+import logging
+import csv
 from rhsm import connection
 from BeautifulSoup import BeautifulSoup
 
+FORMAT = '%(asctime)s %(levelname)s %(message)s'
+logging.basicConfig(format=FORMAT)
+logger = logging.getLogger("python-stageportal")
+logger.setLevel(logging.INFO)
 
 class StagePortal(object):
     api_url="http://example.com/svcrest"
@@ -295,7 +300,7 @@ class StagePortal(object):
         for sub in subscriptions:
             bind = con.bindByEntitlementPool(uuid, sub['id'], sub['quantity'])
             assert bind is not None
-        return []
+        return "<Response [200]>"
 
     def distributor_detach_subscriptions(self, uuid, login, password, subscriptions=[]):
         """ Detach subscriptions from distributor """
@@ -310,9 +315,10 @@ class StagePortal(object):
         diff = list(set(subscriptions) - set(detach_subs))
         assert len(diff) == 0, "Can't detach subs: %s" % diff
         con = connection.UEPConnection(self.candlepin_url, username=login, password=password)
+        con.ping()
         for serial in detach_serials:
             con.unbindBySerial(uuid, serial)
-        return []
+        return "<Response [200]>"
 
     def distributor_download_manifest(self, uuid, login, password):
         """ Download manifest """
@@ -343,7 +349,107 @@ class StagePortal(object):
     def delete_distributor(self, uuid, login, password):
         """ Delete distributor """
         con = connection.UEPConnection(self.candlepin_url, username=login, password=password)
-        return con.unregisterConsumer(uuid)
+        con.unregisterConsumer(uuid)
+        return "<Response [200]>"
+
+    @staticmethod
+    def _namify(name, row):
+        try:
+            return name % row
+        except TypeError:
+            return name
+
+    def _register_system(self, con, org=None, sys_name=None, cores=1, sockets=1, memory=2, arch='x86_64', dist_name='RHEL', dist_version='6.4', installed_products=[], is_guest=False, virt_uuid='', entitlement_dir=None):
+        if sys_name is None:
+            sys_name = 'Testsys' + ''.join(random.choice('0123456789ABCDEF') for i in range(6))
+
+        facts = {}
+        facts['virt.is_guest'] = is_guest
+        if is_guest:
+            facts['virt.uuid'] = virt_uuid
+        facts['cpu.core(s)_per_socket'] = str(cores)
+        facts['cpu.cpu_socket(s)'] = str(sockets)
+        facts['memory.memtotal'] = str(int(memory) * 1024 * 1024)
+        facts['uname.machine'] = arch
+        facts['system.certificate_version'] = '3.2'
+        facts['distribution.name'], facts['distribution.version'] = (dist_name, dist_version)
+
+        sys = con.registerConsumer(name=sys_name, facts=facts, installed_products=installed_products)
+
+        assert sys is not None, 'Failed to register systems %s' % sys_name
+
+        logger.info("Sys %s created with uid %s" % (sys_name, sys['uuid']))
+        if entitlement_dir is not None:
+            try:
+                fd = open(entitlement_dir + '/%s.json' % sys_name, 'w')
+                fd.write(json.dumps(sys))
+                fd.close()
+            except:
+                logger.error("Failed to write system data to %s" % entitlement_dir)
+
+        return (sys_name, sys['uuid'])
+
+    def create_systems(self, login, password, csv_file, entitlement_dir=None, org=None):
+        """
+        Register a bunch of systems from CSV file
+
+        # CSV: Name,Count,Org Label,Environment Label,Groups,Virtual,Host,OS,Arch,Sockets,RAM,Cores,SLA,Products,Subscriptions
+        """
+        all_systems = []
+        host_systems = {}
+
+        con = connection.UEPConnection(self.candlepin_url, username=login, password=password)
+        con.ping()
+
+        data = csv.DictReader(open(csv_file))
+        for row in data:
+            num = 0
+            total = int(row['Count'])
+            while num < total:
+                num += 1
+                name = self._namify(row['Name'], num)
+                cores = row['Cores']
+                sockets = row['Sockets']
+                memory = row['RAM']
+                arch = row['Arch']
+                if row['Virtual'] in ['Yes', 'Y', 'y']:
+                    is_guest = True
+                    virt_uuid = name
+                else:
+                    is_guest = False
+                    virt_uuid = ''
+                if row['OS'].find(' ') != -1:
+                    dist_name, dist_version = row['OS'].split(' ')
+                else:
+                    dist_name, dist_version = ('RHEL', row['OS'])
+
+                installed_products = []
+                if row['Products']:
+                    for product in row['Products'].split(','):
+                        [product_number, product_name] = product.split('|')
+                        installed_products.append({'productId': int(product_number), 'productName': product_name})
+
+                (sys_name, sys_uid) = self._register_system(con, org, name, cores, sockets, memory, arch, dist_name, dist_version, installed_products, is_guest, virt_uuid, entitlement_dir)
+
+                all_systems.append({'name': sys_name, 'uuid': sys_uid})
+
+                if row['Host'] is not None:
+                    host_name = self._namify(row['Host'], num)
+                    if not host_name in host_systems:
+                        for sys in all_systems:
+                            if sys['name'] == host_name:
+                                host_systems[host_name] = [sys['uuid']]
+                    if host_name in host_systems:
+                        host_systems[host_name].append(name)
+
+        for host in host_systems:
+            # setting host/guest allocation
+            host_detail = host_systems[host]
+            if len(host_detail) > 1:
+                logger.debug("Setting host/guest allocation for %s, VMs: %s" % (host_detail[0], host_detail[1::]))
+                con.updateConsumer(host_detail[0], guest_uuids=host_detail[1::])
+
+        return "<Response [200]>"
 
 
 if __name__ == '__main__':
@@ -357,16 +463,21 @@ if __name__ == '__main__':
                     'distributor_detach_subscriptions',
                     'distributor_delete',
                     'distributor_get_manifest']
-    ALL_ACTIONS = ['user_create'] + PWLESS_ACTIONS + DIST_ACTIONS
+    ALL_ACTIONS = ['user_create'] + PWLESS_ACTIONS + DIST_ACTIONS + ['systems_register']
 
     argparser = argparse.ArgumentParser(description='Stage portal tool', epilog='vkuznets@redhat.com')
 
     argparser.add_argument('--action', required=True,
                            help='Requested action', choices=ALL_ACTIONS)
     argparser.add_argument('--login', required=True, help='User login')
-    argparser.add_argument('--portal', required=True, help='The URL to the stage portal.')
 
     [args, ignored_args] = argparser.parse_known_args()
+
+    portal_required = False
+    if args.action in ['distributor_get_manifest']:
+        portal_required = True
+
+    argparser.add_argument('--portal', required=portal_required, help='The URL to the stage portal.')
 
     if args.action in ['user_create', 'user_get', 'sku_add']:
         argparser.add_argument('--api', required=True, help='The URL to the stage portal\'s API.')
@@ -389,6 +500,10 @@ if __name__ == '__main__':
 
         if args.action == 'distributor_detach_subscriptions':
             argparser.add_argument('--sub-ids', required=True, nargs='+', help='sub ids to detach from distributor (space separated list)')
+    if args.action == 'systems_register':
+        argparser.add_argument('--candlepin', required=True, help='The URL to the stage portal\'s Candlepin.')
+        argparser.add_argument('--csv', required=True, help='CSV file with systems definition.')
+        argparser.add_argument('--entitlement-dir', required=False, help='Save entitlement data to dir.')
 
     if not args.action in PWLESS_ACTIONS:
         argparser.add_argument('--password', required=True, help='User password')
@@ -400,7 +515,7 @@ if __name__ == '__main__':
         sys.exit(1)
 
     if 'api' in args:
-        api = args['api']
+        api = args.api
     else:
         api = None
 
@@ -456,6 +571,12 @@ if __name__ == '__main__':
             res = sp.delete_distributor(distributor_uuid, args.login, args.password)
         elif args.action == 'distributor_get_manifest':
             res = sp.distributor_download_manifest(distributor_uuid, args.login, args.password)
+    elif args.action == 'systems_register':
+        # protect against 'you need to accept terms'
+        if portal is not None:
+            session = sp.portal_login(args.login, args.password)
+        systems = sp.create_systems(args.login, args.password, args.csv, args.entitlement_dir)
+        res = pprint.pformat(systems)
     else:
         sys.stderr.write('Unknown action: %s\n' % args.action)
         sys.exit(1)
