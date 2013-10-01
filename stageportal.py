@@ -26,11 +26,12 @@ class StagePortal(object):
     portal_url = "https://access.example.com"
     maxtries = 20
 
-    def __init__(self, api_url=None, candlepin_url=None, portal_url=None, maxtries=20):
+    def __init__(self, api_url=None, candlepin_url=None, portal_url=None, maxtries=20, insecure=None):
         self.api_url = api_url
         self.candlepin_url = candlepin_url
         self.portal_url = portal_url
         self.maxtries = maxtries
+        self.insecure = insecure
 
     def get_user(self, login):
         """ Get portal user """
@@ -398,7 +399,7 @@ class StagePortal(object):
         all_systems = []
         host_systems = {}
 
-        con = connection.UEPConnection(self.candlepin_url, username=login, password=password)
+        con = connection.UEPConnection(self.candlepin_url, username=login, password=password, insecure=self.insecure)
         con.ping()
 
         data = csv.DictReader(open(csv_file))
