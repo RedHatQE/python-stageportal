@@ -375,7 +375,7 @@ class StagePortal(object):
         facts['system.certificate_version'] = '3.2'
         facts['distribution.name'], facts['distribution.version'] = (dist_name, dist_version)
 
-        sys = con.registerConsumer(name=sys_name, facts=facts, installed_products=installed_products)
+        sys = con.registerConsumer(name=sys_name, facts=facts, installed_products=installed_products, owner=org)
 
         assert sys is not None, 'Failed to register systems %s' % sys_name
 
