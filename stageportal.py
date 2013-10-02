@@ -12,7 +12,6 @@ import pprint
 import logging
 import csv
 from rhsm import connection
-from BeautifulSoup import BeautifulSoup
 
 FORMAT = '%(asctime)s %(levelname)s %(message)s'
 logging.basicConfig(format=FORMAT)
@@ -213,24 +212,30 @@ class StagePortal(object):
 
     def check_subscriptions(self, uid_list, login, password):
         """ Check subscription status """
-        url = self.portal_url
-        session = self.portal_login(login, password)
-        assert session is not None
+        uid_set = set(uid_list)
+        con = connection.UEPConnection(self.candlepin_url, username=login, password=password)
+        con.ping()
         ntry = 0
-        for uid in uid_list:
-            while True:
-                req1 = session.get(url + "/wapps/support/protected/details.html", params={'subscriptionId': uid}, verify=False, headers={'Accept-Language': 'en-US'})
-                bs = BeautifulSoup(req1.content)
-                try:
-                    if len(bs.findAll("table")[0].findAll("td")) > 0:
-                        # subscription is present
-                        break
-                except:
+        while True:
+            try:
+                owners = con.getOwnerList(login)
+                subscriptions = []
+                for own in owners:
+                    pools = con.getPoolsList(owner=own['key'])
+                    for pool in pools:
+                        subscriptions.append(pool['subscriptionId'])
+                sub_set = set(subscriptions)
+                if uid_set <= sub_set:
+                    return "<Response [200]>"
+            except Exception, e:
+                # Let's try after login to the portal
+                if self.portal_url is not None:
+                    session = self.portal_login(login, password)
+                else:
                     pass
-                ntry += 1
-                if ntry > self.maxtries:
-                    return None
-        return True
+            ntry += 1
+            if ntry > self.maxtries:
+                return None
 
     def create_distributor(self, name, login, password, distributor_version='sam-1.3'):
         """ Create new distributor on portal"""
@@ -479,7 +484,7 @@ if __name__ == '__main__':
                     'distributor_detach_subscriptions',
                     'distributor_delete',
                     'distributor_get_manifest']
-    ALL_ACTIONS = ['user_create'] + PWLESS_ACTIONS + DIST_ACTIONS + ['systems_register']
+    ALL_ACTIONS = ['user_create'] + PWLESS_ACTIONS + DIST_ACTIONS + ['systems_register', 'subscriptions_check']
 
     argparser = argparse.ArgumentParser(description='Stage portal tool', epilog='vkuznets@redhat.com')
 
@@ -520,6 +525,9 @@ if __name__ == '__main__':
         argparser.add_argument('--candlepin', required=True, help='The URL to the stage portal\'s Candlepin.')
         argparser.add_argument('--csv', required=True, help='CSV file with systems definition.')
         argparser.add_argument('--entitlement-dir', required=False, help='Save entitlement data to dir.')
+    if args.action == 'subscriptions_check':
+        argparser.add_argument('--candlepin', required=True, help='The URL to the stage portal\'s Candlepin.')
+        argparser.add_argument('--sub-ids', required=True, nargs='+', help='sub ids to check (space separated list)')
 
     if not args.action in PWLESS_ACTIONS:
         argparser.add_argument('--password', required=True, help='User password')
@@ -592,6 +600,8 @@ if __name__ == '__main__':
         if portal is not None:
             session = sp.portal_login(args.login, args.password)
         res = sp.create_systems(args.login, args.password, args.csv, args.entitlement_dir)
+    elif args.action == 'subscriptions_check':
+        res = sp.check_subscriptions(args.sub_ids, args.login, args.password)
     else:
         sys.stderr.write('Unknown action: %s\n' % args.action)
         sys.exit(1)
