@@ -16,6 +16,10 @@ CLI usage example
 	$python stageportal.py --login samplecustomer01 --password changeme --api $API --portal $PORTAL --candlepin $CANDLEPIN --action sku_add --sku-id SKUXXXX --sku-quantity 2 --sku-start-date 2012-08-01
 	2687709
 
+	# Checking if SKUs were added (it takes some time to appear)
+	$python stageportal.py --login samplecustomer01 --password changeme --portal $PORTAL --candlepin $CANDLEPIN --action subscriptions_check --sub-ids 2687709
+	<Response [200]>
+
 	# Creating distributor
 	$python stageportal.py --login samplecustomer01 --password changeme --portal $PORTAL --candlepin $CANDLEPIN --action distributor_create --distributor-name sam1
 	c2f87b08-69da-4ed4-9995-b7c5b225d453
