@@ -212,7 +212,7 @@ class StagePortal(object):
 
     def check_subscriptions(self, uid_list, login, password):
         """ Check subscription status """
-        uid_set = set(uid_list)
+        uid_set = set([str(uid) for uid in uid_list])
         con = connection.UEPConnection(self.candlepin_url, username=login, password=password)
         con.ping()
         ntry = 0
