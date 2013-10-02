@@ -245,23 +245,30 @@ class StagePortal(object):
         con.ping()
         ntry = 0
         while True:
-            subscriptions = []
-            owners = con.getOwnerList(login)
-            for own in owners:
-                pools = con.getPoolsList(owner=own['key'])
-                for pool in pools:
-                    count = pool['quantity'] - pool['consumed']
-                    if 'subscriptionSubKey' in pool and pool['subscriptionSubKey'] == 'derived':
-                        # skip derived pools
-                        continue
-                    if count > 0:
-                        subscriptions.append({'id': pool['id'],
-                                              'name': pool['productName'],
-                                              'quantity': count,
-                                              'date_start': pool['startDate'],
-                                              'date_end': pool['endDate']})
-            if expected_subs_count is None or len(subscriptions) >= expected_subs_count:
-                return subscriptions
+            try:
+                owners = con.getOwnerList(login)
+                subscriptions = []
+                for own in owners:
+                    pools = con.getPoolsList(owner=own['key'])
+                    for pool in pools:
+                        count = pool['quantity'] - pool['consumed']
+                        if 'subscriptionSubKey' in pool and pool['subscriptionSubKey'] == 'derived':
+                            # skip derived pools
+                            continue
+                        if count > 0:
+                            subscriptions.append({'id': pool['id'],
+                                                  'name': pool['productName'],
+                                                  'quantity': count,
+                                                  'date_start': pool['startDate'],
+                                                  'date_end': pool['endDate']})
+                if expected_subs_count is None or len(subscriptions) >= expected_subs_count:
+                    return subscriptions
+            except:
+                # Let's try login to the portal
+                if self.portal_url is not None:
+                    self.portal_login(login, password)
+                else:
+                    pass
             if ntry >= self.maxtries:
                 return None
             ntry += 1
