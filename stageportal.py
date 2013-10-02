@@ -296,11 +296,19 @@ class StagePortal(object):
         con.ping()
         if subscriptions is None:
             subscriptions = self.distributor_available_subscriptions(uuid, login, password, subs_count)
-        assert subscriptions != [], "Nothing to attach"
+        assert subscriptions is not None and subscriptions != [], "Nothing to attach"
         assert len(subscriptions) >= subs_count, "Can't attach %s subscriptions" % subs_count
         for sub in subscriptions:
-            bind = con.bindByEntitlementPool(uuid, sub['id'], sub['quantity'])
-            assert bind is not None
+            try:
+                bind = con.bindByEntitlementPool(uuid, sub['id'], sub['quantity'])
+            except:
+                # Let's try binding after login to the portal
+                if self.portal_url is not None:
+                    session = self.portal_login(login, password)
+                    bind = con.bindByEntitlementPool(uuid, sub['id'], sub['quantity'])
+                else:
+                    bind = None
+            assert bind is not None, "Failed to bind %s" % sub
         return "<Response [200]>"
 
     def distributor_detach_subscriptions(self, uuid, login, password, subscriptions=[]):
