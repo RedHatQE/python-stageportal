@@ -11,6 +11,7 @@ import time
 import pprint
 import logging
 import csv
+import datetime
 from rhsm import connection
 
 FORMAT = '%(asctime)s %(levelname)s %(message)s'
@@ -174,6 +175,20 @@ class StagePortal(object):
         order = requests.put(url, headers={"Content-Type": 'application/json'}, data=json.dumps(data)).json()
         regNumber = order['regNumbers'][0][0]['regNumber']
         return self.activate(regNumber, start_date, login)
+
+    def add_skus_csv(self, login, csv_file):
+        """
+         CSV:
+         Id, Quantity, Start Date
+        """
+        sku_list = []
+        data = csv.DictReader(open(csv_file))
+        for row in data:
+            start_date = (datetime.datetime.now() + datetime.timedelta(int(row['Start Date']))).strftime("%Y-%m-%d")
+            if row['Id'][0] != '#':
+                # skipping comments
+                sku_list.append(self.hock_sku(login, row['Id'], row['Quantity'], start_date))
+        return sku_list
 
     def portal_login(self, login, password):
         """ Perform portal login, accept terms if needed """
@@ -503,9 +518,10 @@ if __name__ == '__main__':
     if args.action in ['user_create', 'user_get', 'sku_add']:
         argparser.add_argument('--api', required=True, help='The URL to the stage portal\'s API.')
         if args.action == 'sku_add':
-            argparser.add_argument('--sku-id', required=True, help='SKU id to add')
-            argparser.add_argument('--sku-quantity', required=True, help='SKU quantity to add')
-            argparser.add_argument('--sku-start-date', required=True, help='SKU start date')
+            argparser.add_argument('--sku-id', required=False, help='SKU id to add')
+            argparser.add_argument('--sku-quantity', required=False, help='SKU quantity to add')
+            argparser.add_argument('--sku-start-date', required=False, help='SKU start date')
+            argparser.add_argument('--csv', required=False, help='CSV file with SKUs.')
     if args.action in DIST_ACTIONS:
         argparser.add_argument('--candlepin', required=True, help='The URL to the stage portal\'s Candlepin.')
         if args.action == 'distributor_create':
@@ -530,12 +546,19 @@ if __name__ == '__main__':
         argparser.add_argument('--sub-ids', required=True, nargs='+', help='sub ids to check (space separated list)')
 
     if not args.action in PWLESS_ACTIONS:
-        argparser.add_argument('--password', required=True, help='User password')
+        password_required = True
+    else:
+        password_required = False
+    argparser.add_argument('--password', required=password_required, help='User password')
 
     [args, ignored_args] = argparser.parse_known_args()
 
     if args.action == 'distributor_add_subscriptions' and args.all is False and (args.sub_id is None or args.sub_quantity is None):
         sys.stderr.write('You should specify --sub-id and --sub-quantity to attach specified subscription or use --all to attach all available subscriptions\n')
+        sys.exit(1)
+
+    if args.action == 'sku_add' and args.csv is None and (args.sku_id is None or args.sku_quantity is None or args.sku_start_date is None):
+        sys.stderr.write('You should specify --csv or --sku-id, --sku-quantity and --sku-start-date\n')
         sys.exit(1)
 
     if 'api' in args:
@@ -560,7 +583,15 @@ if __name__ == '__main__':
     elif args.action == 'user_get':
         res = sp.get_user(args.login)
     elif args.action == 'sku_add':
-        res = sp.hock_sku(args.login, args.sku_id, args.sku_quantity, args.sku_start_date)
+        if args.csv is None:
+            res = [sp.hock_sku(args.login, args.sku_id, args.sku_quantity, args.sku_start_date)]
+        else:
+            res = sp.add_skus_csv(args.login, args.csv)
+        if portal is not None and args.password is not None:
+            # Checking if subs appeared in candlepin
+            res_check = sp.check_subscriptions(res, args.login, args.password)
+            if res_check is None:
+                res = None
     elif args.action in DIST_ACTIONS:
         # protect against 'you need to accept terms'
         if portal is not None:
