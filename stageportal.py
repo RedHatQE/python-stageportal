@@ -256,7 +256,15 @@ class StagePortal(object):
         """ Create new distributor on portal"""
         con = connection.UEPConnection(self.candlepin_url, username=login, password=password)
         con.ping()
-        distributor = con.registerConsumer(name=name, type={'id': '5', 'label': 'sam', 'manifest': True}, facts={'distributor_version': distributor_version})
+        try:
+            distributor = con.registerConsumer(name=name, type={'id': '5', 'label': 'sam', 'manifest': True}, facts={'distributor_version': distributor_version})
+        except:
+                # Let's try after login to the portal
+                if self.portal_url is not None:
+                    session = self.portal_login(login, password)
+                    distributor = con.registerConsumer(name=name, type={'id': '5', 'label': 'sam', 'manifest': True}, facts={'distributor_version': distributor_version})
+                else:
+                    return None
         return distributor['uuid']
 
     def distributor_available_subscriptions(self, uuid, login, password, expected_subs_count=None):
