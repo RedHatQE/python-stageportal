@@ -105,6 +105,7 @@ class StagePortal(object):
         """ Place an order """
         url = "%s/regnum/v5/hock/order" % self.api_url
 
+        webCustomerId = self.get_user()
         data = {"regnumType": "entitlement",
                 "satelliteVersion": "",
                 "login": self.login,
@@ -112,10 +113,10 @@ class StagePortal(object):
                 "sendMail": False,
                 "notifyVendor": False,
                 "header": {"companyName": "",
-                           "customerNumber": 1234567890,
+                           "customerNumber": webCustomerId,
                            "customerContactName": "Hockeye",
                            "customerContactEmail": "dev-null@redhat.com",
-                           "customerRhLoginId": "qa@redhat.com",
+                           "customerRhLoginId": self.login,
                            "opportunityNumber": 0,
                            "emailType": "ENGLISH",
                            "industry": "Software",
@@ -368,16 +369,13 @@ class StagePortal(object):
 
     def distributor_download_manifest(self, uuid):
         """ Download manifest """
-        session = self.portal_login()
-        ntry = 0
-        while ntry < self.maxtries:
-            req1 = session.get(self.portal_url + "/management/distributors/%s/certificate/manifestdownload?" % uuid, verify=False, headers={'Accept-Language': 'en-US'})
-            if req1.status_code == 200:
-                break
-            ntry += 1
-        assert req1.status_code == 200
+        req = requests.get("https://%s/subscription/consumers/%s/export" % (self.candlepin_url, uuid), verify=False, auth=(self.login, self.password))
+        if req.status_code != 200:
+            self.portal_login()
+            req = requests.get("https://%s/subscription/consumers/%s/export" % (self.candlepin_url, uuid), verify=False, auth=(self.login, self.password))
+        assert req.status_code == 200, "Failed to download manifest"
         tf = tempfile.NamedTemporaryFile(delete=False, suffix=".zip")
-        tf.write(req1.content)
+        tf.write(req.content)
         tf.close()
         return tf.name
 
