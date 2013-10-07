@@ -214,13 +214,13 @@ class StagePortal(object):
                           headers={'Accept-Language': 'en-US'})
             if req1.status_code != 200:
                 continue
-            if req1.content.find('Welcome&nbsp;' + self.login) == -1:
+            if req1.content.find('Welcome&nbsp;') == -1:
                 # Accepting terms
                 req2 = s.post(url, params={'_flowId': 'legacy-login-flow', '_flowExecutionKey': 'e1s1'},
                               data={'accepted': 'true', '_accepted': 'on', 'optionalTerms_28': 'accept', '_eventId_submit': 'Continue', '_flowExecutionKey': 'e1s1', 'redirect': ''})
                 if req2.status_code != 200:
                     continue
-                if req2.content.find('Open Source Assurance Agreement Acceptance Confirmation') != -1 or req2.content.find('Welcome&nbsp;' + self.login) == -1:
+                if req2.content.find('Open Source Assurance Agreement Acceptance Confirmation') != -1 or req2.content.find('Welcome&nbsp;') == -1:
                     continue
             req3 = s.get(self.portal_url + "/management/" , verify=False, headers={'Accept-Language': 'en-US'})
             if req3.status_code == 200:
