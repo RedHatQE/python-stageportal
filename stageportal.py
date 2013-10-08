@@ -6,6 +6,7 @@ import json
 import re
 import tempfile
 import argparse
+import os
 import sys
 import time
 import pprint
@@ -34,7 +35,7 @@ class StagePortal(object):
         self.insecure = insecure
         self.login = login
         self.password = password
-        self.con = connection.UEPConnection(self.candlepin_url, username=self.login, password=self.password)
+        self.con = connection.UEPConnection(self.candlepin_url, username=self.login, password=self.password, insecure=insecure)
 
     def get_user(self):
         """ Get portal user """
@@ -248,7 +249,7 @@ class StagePortal(object):
                 if uid_set <= sub_set:
                     return "<Response [200]>"
                 else:
-                    logger.info("Can't find %s in subscriptions" % list(uid_set - sub_set))
+                    logger.debug("Can't find %s in subscriptions" % list(uid_set - sub_set))
             except Exception, e:
                 # Let's try after login to the portal
                 logger.debug("Error trying to check subs: %s" % e)
@@ -445,17 +446,133 @@ class StagePortal(object):
 
         return (sys_name, sys['uuid'])
 
-    def _get_best_pool(self, pools, productId, is_virtual):
-        if is_virtual:
-            # searching for derived pool
-            for pool in pools:
-                if pool['productId'] == productId and (pool['consumed'] < pool['quantity'] or pool['quantity'] == -1) and pool['subscriptionSubKey'] == 'derived':
-                    return pool['id']
-        # searching for normal pool
+    def _get_suitable_pools(self, pools, productId, is_virtual):
+        pool_ids = []
         for pool in pools:
             if pool['productId'] == productId and (pool['consumed'] < pool['quantity'] or pool['quantity'] == -1):
-                return pool['id']
-        return None
+                if is_virtual in [True, 'true', 'True'] and pool['subscriptionSubKey'] != 'master':
+                    pool_ids.insert(0, pool['id'])
+                elif pool['subscriptionSubKey'] == 'master':
+                    pool_ids.append(pool['id'])
+                else:
+                    # skip derived pools for non-virtual systems
+                    pass
+        return pool_ids
+
+    def subscribe_systems(self, systems=None, csv_file=None, entitlement_dir=None, org=None, update=False):
+        """ Subscribe systems """
+        if systems is None and csv_file is None:
+            logger.error('Neither csv_file nor systems were specified!')
+            return None
+
+        if systems is None and org is None:
+            logger.error('Neither org nor systems were specified!')
+            return None
+
+        if systems is not None:
+            all_systems = systems[::]
+        else:
+            all_systems = []
+            for consumer in self.con.getConsumers(owner=org):
+                # put physical systems in front
+                if consumer['facts']['virt.is_guest'] in [True, 'true', 'True']:
+                    all_systems.append(consumer)
+                else:
+                    all_systems.insert(0, consumer)
+
+        if org is None:
+            owners = self.con.getOwnerList(self.login)
+            logger.debug("Owners: %s" % owners)
+        else:
+            owners = [org]
+
+        ext_subs = {}
+
+        if systems is None:
+            data = csv.DictReader(open(csv_file))
+            for row in data:
+                num = 0
+                total = int(row['Count'])
+                subscriptions = []
+                if row['Subscriptions']:
+                    for sub in row['Subscriptions'].split(';'):
+                        [sub_id, sub_name] = sub.split('|')
+                        subscriptions.append({'productId': sub_id, 'productName': sub_name})
+                while num < total:
+                    num += 1
+                    name = self._namify(row['Name'], num)
+                    ext_subs[name] = subscriptions
+
+        for sys in all_systems:
+            pools = []
+            if org is None:
+                for own in owners:
+                    own_pools = self.con.getPoolsList(sys['uuid'], owner=own['key'])
+                    pools += own_pools
+            else:
+                pools = self.con.getPoolsList(sys['uuid'], owner=org)
+
+            existing_subs = []
+            if update:
+                for ent in self.con.getEntitlementList(sys['uuid']):
+                    existing_subs.append(ent['pool']['productId'])
+
+            processed_subs = []
+
+            if systems is None:
+                if sys['name'] in ext_subs:
+                    system_subs = ext_subs[sys['name']]
+                else:
+                    logger.error('No subscription data for %s:%s' % (sys['name'], sys['uuid']))
+                    system_subs = []
+            else:
+                system_subs = sys['subscriptions']
+
+            if systems is None:
+                # we need to bind as customer
+                idcert = self.con.getConsumer(sys['uuid'])
+                tf_cert = tempfile.NamedTemporaryFile(delete=False, suffix=".pem")
+                tf_cert.write(idcert['idCert']['cert'])
+                tf_cert.close()
+                tf_key = tempfile.NamedTemporaryFile(delete=False, suffix=".pem")
+                tf_key.write(idcert['idCert']['key'])
+                tf_key.close()
+                con_client = connection.UEPConnection(self.candlepin_url, insecure=self.insecure, cert_file=tf_cert.name, key_file=tf_key.name)
+            else:
+                con_client = self.con
+                tf_cert = None
+                tf_key = None
+
+            for sub in system_subs:
+                processed_subs.append(sub['productId'])
+                if not sub['productId'] in existing_subs:
+                    # we need to attach sub
+                    pool_ids =  self._get_suitable_pools(pools, sub['productId'], sys['facts']['virt.is_guest'])
+                    attached = None
+                    for pool_id in pool_ids:
+                        try:
+                            req = con_client.bindByEntitlementPool(sys['uuid'], pool_id)
+                            attached = pool_id
+                            break
+                        except:
+                            # pool was not attached for some reason, let's try another one
+                            pass
+                    if attached is not None:
+                        logger.info('Successfully subscribed system %s:%s to pool %s' % (sys['name'], sys['uuid'], attached))
+                    else:
+                        logger.error('Failed to find appropriate pool for system %s:%s' % (sys['name'], sys['uuid']))
+            if update:
+                for ent in client_con.getEntitlementList(sys['uuid']):
+                    if not ent['pool']['productId'] in processed_subs:
+                        # unbinding everything else
+                        serial = ent['certificates'][0]['serial']['serial']
+                        req = client_con.unbindBySerial(sys['uuid'], serial)
+            if tf_cert is not None:
+                os.unlink(tf_cert.name)
+            if tf_key is not None:
+                os.unlink(tf_key.name)
+
+        return "<Response [200]>"
 
     def create_systems(self, csv_file, entitlement_dir=None, org=None, subscribe=True, update=False):
         """
@@ -472,39 +589,40 @@ class StagePortal(object):
         for row in data:
             num = 0
             total = int(row['Count'])
+            cores = row['Cores']
+            sockets = row['Sockets']
+            memory = row['RAM']
+            arch = row['Arch']
+            if row['Virtual'] in ['Yes', 'Y', 'y']:
+                is_guest = True
+                virt_uuid = name
+            else:
+                is_guest = False
+                virt_uuid = ''
+            if row['OS'].find(' ') != -1:
+                dist_name, dist_version = row['OS'].split(' ')
+            else:
+                dist_name, dist_version = ('RHEL', row['OS'])
+
+            installed_products = []
+            if row['Products']:
+                for product in row['Products'].split(','):
+                    [product_number, product_name] = product.split('|')
+                    installed_products.append({'productId': int(product_number), 'productName': product_name})
+
+            subscriptions = []
+            if row['Subscriptions']:
+                for sub in row['Subscriptions'].split(';'):
+                    [sub_id, sub_name] = sub.split('|')
+                    subscriptions.append({'productId': sub_id, 'productName': sub_name})
+
             while num < total:
                 num += 1
                 name = self._namify(row['Name'], num)
-                cores = row['Cores']
-                sockets = row['Sockets']
-                memory = row['RAM']
-                arch = row['Arch']
-                if row['Virtual'] in ['Yes', 'Y', 'y']:
-                    is_guest = True
-                    virt_uuid = name
-                else:
-                    is_guest = False
-                    virt_uuid = ''
-                if row['OS'].find(' ') != -1:
-                    dist_name, dist_version = row['OS'].split(' ')
-                else:
-                    dist_name, dist_version = ('RHEL', row['OS'])
-
-                installed_products = []
-                if row['Products']:
-                    for product in row['Products'].split(','):
-                        [product_number, product_name] = product.split('|')
-                        installed_products.append({'productId': int(product_number), 'productName': product_name})
-
-                subscriptions = []
-                if row['Subscriptions']:
-                    for sub in row['Subscriptions'].split(';'):
-                        [sub_id, sub_name] = sub.split('|')
-                        subscriptions.append({'productId': sub_id, 'productName': sub_name})
 
                 (sys_name, sys_uid) = self._register_system(org, name, cores, sockets, memory, arch, dist_name, dist_version, installed_products, is_guest, virt_uuid, entitlement_dir)
 
-                all_systems.append({'name': sys_name, 'uuid': sys_uid, 'subscriptions': subscriptions, 'is_guest': is_guest})
+                all_systems.append({'name': sys_name, 'uuid': sys_uid, 'subscriptions': subscriptions, 'facts':{'virt.is_guest': is_guest}})
 
                 if row['Host'] is not None:
                     host_name = self._namify(row['Host'], num)
@@ -523,43 +641,7 @@ class StagePortal(object):
                 self.con.updateConsumer(host_detail[0], guest_uuids=host_detail[1::])
 
         if subscribe:
-            pools = []
-            owners = self.con.getOwnerList(self.login)
-            logger.debug("Owners: %s" % owners)
-            for own in owners:
-                own_pools = self.con.getPoolsList(owner=own['key'])
-                pools += own_pools
-            for sys in all_systems:
-                existing_subs = []
-                if update:
-                    for ent in self.con.getEntitlementList(sys['uuid']):
-                        existing_subs.append(ent['pool']['productId'])
-
-                pools_for_sys = self.con.getPoolsList(consumer=sys['uuid'])
-                if pools_for_sys == []:
-                    # will try to use owner-wide pools
-                    pools_for_sys = pools
-                processed_subs = []
-                for sub in sys['subscriptions']:
-                    processed_subs.append(sub['productId'])
-                    if not sub['productId'] in existing_subs:
-                        # we need to attach sub
-                        pool_id =  self._get_best_pool(pools_for_sys, sub['productId'], sys['is_guest'])
-                        if pool_id is not None:
-                            req = self.con.bindByEntitlementPool(sys['uuid'], pool_id)
-                            if req is None:
-                                logger.error('Failed to bind pool %s to system %s:%s' % (pool_id, sys['name'], sys['uuid']))
-                            else:
-                                logger.info('Successfully subscribed system %s:%s to pool %s' % (sys['name'], sys['uuid'], pool_id))
-                        else:
-                            logger.error('Failed to find appropriate pool for system %s:%s' % (sys['name'], sys['uuid']))
-                if update:
-                    for ent in self.con.getEntitlementList(sys['uuid']):
-                        if not ent['pool']['productId'] in processed_subs:
-                            # unbinding everything else
-                            serial = ent['certificates'][0]['serial']['serial']
-                            req = self.con.unbindBySerial(sys['uuid'], serial)
-
+            return self.subscribe_systems(systems=all_systems, csv_file=None, entitlement_dir=entitlement_dir, org=org, update=update)
         return "<Response [200]>"
 
 
@@ -616,6 +698,7 @@ if __name__ == '__main__':
         argparser.add_argument('--candlepin', required=True, help='The URL to the stage portal\'s Candlepin.')
         argparser.add_argument('--csv', required=True, help='CSV file with systems definition.')
         argparser.add_argument('--entitlement-dir', required=False, help='Save entitlement data to dir.')
+        argparser.add_argument('--org', required=False, help='Create systems within org (standalone candlepin).')
     if args.action == 'subscriptions_check':
         argparser.add_argument('--candlepin', required=True, help='The URL to the stage portal\'s Candlepin.')
         argparser.add_argument('--sub-ids', required=True, nargs='+', help='sub ids to check (space separated list)')
@@ -705,7 +788,7 @@ if __name__ == '__main__':
         # protect against 'you need to accept terms'
         if portal is not None:
             session = sp.portal_login()
-        res = sp.create_systems(args.csv, args.entitlement_dir)
+        res = sp.create_systems(args.csv, args.entitlement_dir, args.org)
     elif args.action == 'subscriptions_check':
         res = sp.check_subscriptions(args.sub_ids)
     else:
