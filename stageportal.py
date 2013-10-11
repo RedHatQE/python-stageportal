@@ -181,19 +181,35 @@ class StagePortal(object):
         regNumber = order['regNumbers'][0][0]['regNumber']
         return self.activate(regNumber, start_date)
 
+    def add_skus(self, skus):
+        """
+        Create SKUs
+        """
+        sku_added_list = []
+        for sku in skus:
+            sku_added_list.append(self.hock_sku(sku['Id'], sku['Quantity'], sku['Start Date']))
+        return sku_added_list
+
     def add_skus_csv(self, csv_file):
         """
          CSV:
-         Id, Quantity, Start Date
+         Id, Quantity[, Start Date]
         """
         sku_list = []
         data = csv.DictReader(open(csv_file))
         for row in data:
-            start_date = (datetime.datetime.now() + datetime.timedelta(int(row['Start Date']))).strftime("%Y-%m-%d")
-            if row['Id'][0] != '#':
+            if row['Id'][0] == '#':
                 # skipping comments
-                sku_list.append(self.hock_sku(row['Id'], row['Quantity'], start_date))
-        return sku_list
+                continue
+            if 'Start Date' in row:
+                try:
+                    start_date = (datetime.datetime.now() + datetime.timedelta(int(row['Start Date']))).strftime("%Y-%m-%d")
+                except:
+                    start_date = row['Start Date']
+            else:
+                 start_date = datetime.datetime.now().strftime("%Y-%m-%d")
+            sku_list.append({'Id': row['Id'], 'Quantity': row['Quantity'], 'Start Date': start_date})
+        return self.add_skus(sku_list)
 
     def portal_login(self):
         """ Perform portal login, accept terms if needed """
