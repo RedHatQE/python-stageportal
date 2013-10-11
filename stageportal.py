@@ -491,6 +491,10 @@ class StagePortal(object):
             all_systems = []
             for consumer in self.con.getConsumers(owner=org):
                 # put physical systems in front
+                if not 'facts' in consumer:
+                    # need to fetch additional data
+                    consumer = self.con.getConsumer(consumer['uuid'])
+
                 if consumer['facts']['virt.is_guest'] in [True, 'true', 'True']:
                     all_systems.append(consumer)
                 else:
