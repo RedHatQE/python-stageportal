@@ -613,12 +613,6 @@ class StagePortal(object):
             sockets = row['Sockets']
             memory = row['RAM']
             arch = row['Arch']
-            if row['Virtual'] in ['Yes', 'Y', 'y']:
-                is_guest = True
-                virt_uuid = name
-            else:
-                is_guest = False
-                virt_uuid = ''
             if row['OS'].find(' ') != -1:
                 dist_name, dist_version = row['OS'].split(' ')
             else:
@@ -639,6 +633,12 @@ class StagePortal(object):
             while num < total:
                 num += 1
                 name = self._namify(row['Name'], num)
+                if row['Virtual'] in ['Yes', 'Y', 'y']:
+                    is_guest = True
+                    virt_uuid = name
+                else:
+                    is_guest = False
+                    virt_uuid = ''
 
                 (sys_name, sys_uid) = self._register_system(org, name, cores, sockets, memory, arch, dist_name, dist_version, installed_products, is_guest, virt_uuid, entitlement_dir)
 
@@ -652,6 +652,8 @@ class StagePortal(object):
                                 host_systems[host_name] = [sys['uuid']]
                     if host_name in host_systems:
                         host_systems[host_name].append(name)
+
+        logger.debug("Host/guest allocation: %s" % host_systems)
 
         for host in host_systems:
             # setting host/guest allocation
