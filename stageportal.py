@@ -664,7 +664,7 @@ class StagePortal(object):
 
         if subscribe:
             return self.subscribe_systems(systems=all_systems, csv_file=None, entitlement_dir=entitlement_dir, org=org, update=update)
-        return "<Response [200]>"
+        return all_systems
 
 
 if __name__ == '__main__':
@@ -811,6 +811,8 @@ if __name__ == '__main__':
         if portal is not None:
             session = sp.portal_login()
         res = sp.create_systems(args.csv, args.entitlement_dir, args.org)
+        if res is not None:
+            res = "<Response [200]>"
     elif args.action == 'subscriptions_check':
         res = sp.check_subscriptions(args.sub_ids)
     else:
