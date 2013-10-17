@@ -178,8 +178,12 @@ class StagePortal(object):
                                         "replicatorAcctNumber": ""}}]}
 
         order = requests.put(url, headers={"Content-Type": 'application/json'}, data=json.dumps(data)).json()
-        regNumber = order['regNumbers'][0][0]['regNumber']
-        return self.activate(regNumber, start_date)
+        if order is not None and 'regNumbers' in order:
+            regNumber = order['regNumbers'][0][0]['regNumber']
+            return self.activate(regNumber, start_date)
+        else:
+            logger.error("Failed to register SUB: %s" % order)
+            return None
 
     def add_skus(self, skus):
         """
@@ -424,6 +428,24 @@ class StagePortal(object):
         except TypeError:
             return name
 
+    def _register_hypervisor(self, org=None, sys_name=None):
+        if sys_name is None:
+            sys_name = 'TestHypervisor' + ''.join(random.choice('0123456789ABCDEF') for i in range(6))
+
+        try:
+            sys = self.con.registerConsumer(name=sys_name, type={'id': '6', 'label': 'hypervisor', 'manifest': True}, facts={}, owner=org)
+        except:
+            # Let's try binding after login to the portal
+            if self.portal_url is not None:
+                session = self.portal_login()
+                sys = self.con.registerConsumer(name=sys_name, type={'id': '6', 'label': 'hypervisor', 'manifest': True}, facts={}, owner=org)
+            else:
+                sys = None
+
+        assert sys is not None, 'Failed to register hypervisor %s' % sys_name
+        logger.info("Hypervisor %s created with uid %s" % (sys_name, sys['uuid']))
+        return (sys_name, sys['uuid'])
+
     def _register_system(self, org=None, sys_name=None, cores=1, sockets=1, memory=2, arch='x86_64', dist_name='RHEL', dist_version='6.4', installed_products=[], is_guest=False, virt_uuid='', entitlement_dir=None):
         if sys_name is None:
             sys_name = 'Testsys' + ''.join(random.choice('0123456789ABCDEF') for i in range(6))
@@ -617,6 +639,9 @@ class StagePortal(object):
                 dist_name, dist_version = row['OS'].split(' ')
             else:
                 dist_name, dist_version = ('RHEL', row['OS'])
+            consumer_type = 'System'
+            if 'Type' in row:
+                consumer_type = row['Type']
 
             installed_products = []
             if row['Products']:
@@ -640,7 +665,12 @@ class StagePortal(object):
                     is_guest = False
                     virt_uuid = ''
 
-                (sys_name, sys_uid) = self._register_system(org, name, cores, sockets, memory, arch, dist_name, dist_version, installed_products, is_guest, virt_uuid, entitlement_dir)
+                if consumer_type in ['system', 'System']:
+                    (sys_name, sys_uid) = self._register_system(org, name, cores, sockets, memory, arch, dist_name, dist_version, installed_products, is_guest, virt_uuid, entitlement_dir)
+                elif consumer_type in ['hypervisor', 'Hypervisor']:
+                    (sys_name, sys_uid) = self._register_hypervisor(org, name)
+                else:
+                    logging.error("Unknown consumer type %s for %s" % (consumer_type, name))
 
                 all_systems.append({'name': sys_name, 'uuid': sys_uid, 'subscriptions': subscriptions, 'facts':{'virt.is_guest': is_guest}})
 
