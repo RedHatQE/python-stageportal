@@ -98,9 +98,12 @@ class StagePortal(object):
                 "webCustomerId": webCustomerId,
                 "systemName": "genie"
                 }
-        return requests.post(url,
-                             headers={"Content-Type": 'application/json'},
-                             data=json.dumps(data)).json()['id']
+        req = requests.post(url, headers={"Content-Type": 'application/json'}, data=json.dumps(data))
+        try:
+            return req.json()['id']
+        except:
+            logger.error("Error during SUB activation: %s" % req.content)
+            return None
 
     def hock_sku(self, SKU, quantity, start_date):
         """ Place an order """
@@ -797,7 +800,7 @@ if __name__ == '__main__':
             res = [sp.hock_sku(args.sku_id, args.sku_quantity, args.sku_start_date)]
         else:
             res = sp.add_skus_csv(args.csv)
-        if portal is not None and args.password is not None:
+        if portal is not None and args.password is not None and not (None in res):
             # Checking if subs appeared in candlepin
             res_check = sp.check_subscriptions(res)
             if res_check is None:
