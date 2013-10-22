@@ -649,7 +649,7 @@ class StagePortal(object):
 
             installed_products = []
             if row['Products']:
-                for product in row['Products'].split(','):
+                for product in row['Products'].split(';'):
                     [product_number, product_name] = product.split('|')
                     installed_products.append({'productId': int(product_number), 'productName': product_name})
 
