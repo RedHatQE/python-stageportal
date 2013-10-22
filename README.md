@@ -72,6 +72,10 @@ CLI usage example
 	test_one%d,1,,,,N,,6Server,x86_64,1,4,,Standard,69|Red Hat Enterprise Linux Server,"RH0192098|Red Hat Enterprise Linux Server, Standard (1-2 sockets) (Unlimited guests)"
 	test_one1.vm%d,1,,,,Y,test_one1,6Server,x86_64,1,4,,Standard,69|Red Hat Enterprise Linux Server,"RH0192098|Red Hat Enterprise Linux Server, Standard (1-2 sockets) (Unlimited guests)"
 
+	#Heal entire org job
+	$python stageportal.py --login samplecustomer01 --password changeme ---portal $PORTAL --candlepin $CANDLEPIN --action heal_org
+	{u'finishTime': None, u'targetType': u'owner', u'updated': u'2013-10-22T09:16:25.791+0000', u'group': u'async group', u'created': u'2013-10-22T09:16:25.791+0000', u'statusPath': u'/jobs/heal_entire_org_1a259d55-067a-4b7e-b19a-ddc56cd8d6b9', u'targetId': u'target_id', u'principalName': u'samplecustomer01', u'state': u'CREATED', u'result': None, u'startTime': None, u'id': u'heal_entire_org_1a259d55-067a-4b7e-b19a-ddc56cd8d6b9'}
+
 Contact
 -------
 vkuznets at redhat.com

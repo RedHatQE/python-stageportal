@@ -281,6 +281,7 @@ class StagePortal(object):
                 else:
                     pass
             ntry += 1
+            time.sleep(2)
             if ntry > self.maxtries:
                 return None
 
@@ -393,10 +394,10 @@ class StagePortal(object):
 
     def distributor_download_manifest(self, uuid):
         """ Download manifest """
-        req = requests.get("https://%s/subscription/consumers/%s/export" % (self.candlepin_url, uuid), verify=False, auth=(self.login, self.password))
+        req = requests.get("https://%s%s/consumers/%s/export" % (self.con.host, self.con.handler, uuid), verify=False, auth=(self.login, self.password))
         if req.status_code != 200:
             self.portal_login()
-            req = requests.get("https://%s/subscription/consumers/%s/export" % (self.candlepin_url, uuid), verify=False, auth=(self.login, self.password))
+            req = requests.get("https://%s%s/consumers/%s/export" % (self.con.host, self.con.handler, uuid), verify=False, auth=(self.login, self.password))
         assert req.status_code == 200, "Failed to download manifest"
         tf = tempfile.NamedTemporaryFile(delete=False, suffix=".zip")
         tf.write(req.content)
@@ -699,6 +700,29 @@ class StagePortal(object):
             return self.subscribe_systems(systems=all_systems, csv_file=None, entitlement_dir=entitlement_dir, org=org, update=update)
         return all_systems
 
+    def heal_entire_org(self, owner=None, wait=False, timeout=None):
+        if owner is None:
+            owner_list = self.con.getOwnerList(self.con.username)
+            if owner_list is None or owner_list == []:
+                logging.error('Failed to get owner list')
+                return None
+            else:
+                if len(owner_list) > 1:
+                    logging.info('There are multiple owners available, will heal the first one: %s' % owner_list[0]['key'])
+                owner = owner_list[0]['key']
+        url = 'https://%s%s/owners/%s/entitlements' % (self.con.host, self.con.handler, owner)
+        req = requests.post(url, auth=(self.con.username, self.con.password), verify=False)
+        if req.status_code == 202:
+            retval = req.json()
+        else:
+            logging.error('Failed to heal entire org: %s (code %s)' % (req.content, req.status_code))
+            retval = None
+        if not wait:
+            return retval
+        else:
+            # tmp
+            return retval
+
 
 if __name__ == '__main__':
 
@@ -711,7 +735,7 @@ if __name__ == '__main__':
                     'distributor_detach_subscriptions',
                     'distributor_delete',
                     'distributor_get_manifest']
-    ALL_ACTIONS = ['user_create'] + PWLESS_ACTIONS + DIST_ACTIONS + ['systems_register', 'subscriptions_check']
+    ALL_ACTIONS = ['user_create'] + PWLESS_ACTIONS + DIST_ACTIONS + ['systems_register', 'subscriptions_check', 'heal_org']
 
     argparser = argparse.ArgumentParser(description='Stage portal tool', epilog='vkuznets@redhat.com')
 
@@ -749,6 +773,9 @@ if __name__ == '__main__':
 
         if args.action == 'distributor_detach_subscriptions':
             argparser.add_argument('--sub-ids', required=True, nargs='+', help='sub ids to detach from distributor (space separated list)')
+    if args.action == 'heal_org':
+        argparser.add_argument('--candlepin', required=True, help='The URL to the stage portal\'s Candlepin.')
+        argparser.add_argument('--org', required=False, help='Org to heal (standalone candlepin).')
     if args.action == 'systems_register':
         argparser.add_argument('--candlepin', required=True, help='The URL to the stage portal\'s Candlepin.')
         argparser.add_argument('--csv', required=True, help='CSV file with systems definition.')
@@ -848,6 +875,8 @@ if __name__ == '__main__':
             res = "<Response [200]>"
     elif args.action == 'subscriptions_check':
         res = sp.check_subscriptions(args.sub_ids)
+    elif args.action == 'heal_org':
+        res = sp.heal_entire_org()
     else:
         sys.stderr.write('Unknown action: %s\n' % args.action)
         sys.exit(1)
