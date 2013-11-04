@@ -58,7 +58,7 @@ class StagePortal(object):
                     logger.debug("Checking: failed")
                     res = None
             except Exception, e:
-                logger.debug("Checking: exception: %s" % (res, e))
+                logger.debug("Checking: exception: %s" % e)
                 if do_login:
                     self.portal_login()
             ntry += 1
@@ -815,3 +815,5 @@ if __name__ == '__main__':
         sys.stderr.write('Unknown action: %s\n' % args.action)
         sys.exit(1)
     sys.stdout.write('%s\n' % res)
+    if res in [[], None]:
+        sys.exit(1)
