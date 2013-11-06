@@ -25,9 +25,8 @@ class StagePortal(object):
     api_url = "http://example.com/svcrest"
     candlepin_url = "https://subs.example.com"
     portal_url = "https://access.example.com"
-    maxtries = 20
 
-    def __init__(self, api_url=None, candlepin_url=None, portal_url=None, login='admin', password='admin', maxtries=20, insecure=None):
+    def __init__(self, api_url=None, candlepin_url=None, portal_url=None, login='admin', password='admin', maxtries=40, insecure=None):
         self.api_url = api_url
         self.candlepin_url = candlepin_url
         self.portal_url = portal_url
