@@ -36,7 +36,7 @@ class StagePortal(object):
         self.password = password
         self.con = connection.UEPConnection(self.candlepin_url, username=self.login, password=self.password, insecure=insecure)
 
-    def retr(self, func, check, blow_up, do_login, *args, **kwargs):
+    def retr(self, func, check, sleep, blow_up, do_login, *args, **kwargs):
         res = None
         ntry = 0
         logger.debug("Performing %s with args: %s kwargs %s" % (func, args, kwargs))
@@ -61,7 +61,7 @@ class StagePortal(object):
                 if do_login:
                     self.portal_login()
             ntry += 1
-            time.sleep(1)
+            time.sleep(sleep)
         if ntry >= self.maxtries:
             logger.error("%s failed after %s tries" % (func, self.maxtries))
             if blow_up is True:
@@ -72,7 +72,7 @@ class StagePortal(object):
         """ Get portal user """
 
         url = "%s/user/v3/login=%s" % (self.api_url, self.login)
-        user = self.retr(requests.get, lambda res: res.json()[0]['customer']['id'] is not None, True, False, url)
+        user = self.retr(requests.get, lambda res: res.json()[0]['customer']['id'] is not None, 1, True, False, url)
         return user.json()[0]['customer']['id']
 
     def create_user(self):
@@ -97,7 +97,7 @@ class StagePortal(object):
                                                 "county": "Wake",
                                                 "countryCode": "US",
                                                 "postalCode": "27606"}}}
-        return self.retr(requests.post, lambda res: int(res.content) is not None, True, False, url, headers={"Content-Type": 'application/json'}, data=json.dumps(newuser)).content
+        return self.retr(requests.post, lambda res: int(res.content) is not None, 1, True, False, url, headers={"Content-Type": 'application/json'}, data=json.dumps(newuser)).content
 
     def activate(self, regNumber, start_date):
         """ Activate regNumber """
@@ -112,7 +112,7 @@ class StagePortal(object):
                 "webCustomerId": webCustomerId,
                 "systemName": "genie"
                 }
-        req = self.retr(requests.post, lambda res: res.json()['id'] is not None, True, False, url, headers={"Content-Type": 'application/json'}, data=json.dumps(data))
+        req = self.retr(requests.post, lambda res: res.json()['id'] is not None, 1, True, False, url, headers={"Content-Type": 'application/json'}, data=json.dumps(data))
         return req.json()['id']
 
     def hock_sku(self, SKU, quantity, start_date):
@@ -190,7 +190,7 @@ class StagePortal(object):
                                         "partnerAcctNumber": "",
                                         "replicatorAcctNumber": ""}}]}
 
-        order = self.retr(requests.put, lambda res: 'regNumbers' in res.json(), True, False, url, headers={"Content-Type": 'application/json'}, data=json.dumps(data))
+        order = self.retr(requests.put, lambda res: 'regNumbers' in res.json(), 1, True, False, url, headers={"Content-Type": 'application/json'}, data=json.dumps(data))
         regNumber = order.json()['regNumbers'][0][0]['regNumber']
         return self.activate(regNumber, start_date)
 
@@ -235,25 +235,25 @@ class StagePortal(object):
         s = requests.session()
         s.verify = False
 
-        req1 = self.retr(s.post, lambda res: res.status_code == 200, True, False, url,
+        req1 = self.retr(s.post, lambda res: res.status_code == 200, 1, True, False, url,
                          data={'_flowId': 'legacy-login-flow', 'failureRedirect': url,
                                'username': self.login, 'password': self.password},
                          headers={'Accept-Language': 'en-US'})
         if req1.content.find('Welcome&nbsp;') == -1:
             # Accepting terms
             req_checker = lambda res: res.status_code == 200 and (res.content.find('Open Source Assurance Agreement Acceptance Confirmation') != -1 or res.content.find('Welcome&nbsp;') == -1)
-            req2 = self.retr(s.post, req_checker, True, False, url, params={'_flowId': 'legacy-login-flow', '_flowExecutionKey': 'e1s1'},
+            req2 = self.retr(s.post, req_checker, 1, True, False, url, params={'_flowId': 'legacy-login-flow', '_flowExecutionKey': 'e1s1'},
                              data={'accepted': 'true', '_accepted': 'on', 'optionalTerms_28': 'accept', '_eventId_submit': 'Continue', '_flowExecutionKey': 'e1s1', 'redirect': ''})
-        req3 = self.retr(s.get, lambda res: res.status_code == 200, True, False, self.portal_url + "/management/" , verify=False, headers={'Accept-Language': 'en-US'})
+        req3 = self.retr(s.get, lambda res: res.status_code == 200, 1, True, False, self.portal_url + "/management/" , verify=False, headers={'Accept-Language': 'en-US'})
         return s
 
     def _get_subscriptions(self):
-        self.retr(self.con.ping, lambda res: res is not None, True, True)
-        owners = self.retr(self.con.getOwnerList, lambda res: res is not None, True, True, self.login)
+        self.retr(self.con.ping, lambda res: res is not None, 1, True, True)
+        owners = self.retr(self.con.getOwnerList, lambda res: res is not None, 1, True, True, self.login)
         logger.debug("Owners: %s" % owners)
         subscriptions = []
         for own in owners:
-            pools = self.retr(self.con.getPoolsList, lambda res: res is not None, True, True, owner=own['key'])
+            pools = self.retr(self.con.getPoolsList, lambda res: res is not None, 1, True, True, owner=own['key'])
             for pool in pools:
                 subscriptions.append(pool['subscriptionId'])
             logger.debug("Subscriptions: %s" % subscriptions)
@@ -263,7 +263,7 @@ class StagePortal(object):
         """ Check subscription status """
         ntry = 0
         uid_set = set([str(uid) for uid in uid_list])
-        sub_set = self.retr(self._get_subscriptions, lambda res: uid_set <= res, False, True)
+        sub_set = self.retr(self._get_subscriptions, lambda res: uid_set <= res, 5, False, True)
         if sub_set is not None:
             return "<Response [200]>"
         else:
@@ -272,18 +272,18 @@ class StagePortal(object):
 
     def create_distributor(self, name, distributor_version='sam-1.3'):
         """ Create new distributor on portal"""
-        self.retr(self.con.ping, lambda res: res is not None, True, True)
-        distributor = self.retr(self.con.registerConsumer, lambda res: 'uuid' in res, True, True,
+        self.retr(self.con.ping, lambda res: res is not None, 1, True, True)
+        distributor = self.retr(self.con.registerConsumer, lambda res: 'uuid' in res, 1, True, True,
                                 name=name, type={'id': '5', 'label': 'sam', 'manifest': True}, facts={'distributor_version': distributor_version})
         return distributor['uuid']
 
     def distributor_available_subscriptions(self, uuid):
         """ Get available/attached subscriptions """
-        self.retr(self.con.ping, lambda res: res is not None, True, True)
-        owners = self.retr(self.con.getOwnerList, lambda res: 'key' in res[0], True, True, self.login)
+        self.retr(self.con.ping, lambda res: res is not None, 1, True, True)
+        owners = self.retr(self.con.getOwnerList, lambda res: 'key' in res[0], 1, True, True, self.login)
         subscriptions = []
         for own in owners:
-            pools = self.retr(self.con.getPoolsList, lambda res: res is not None, True, True, owner=own['key'])
+            pools = self.retr(self.con.getPoolsList, lambda res: res is not None, 1, True, True, owner=own['key'])
             for pool in pools:
                 count = pool['quantity'] - pool['consumed']
                 if 'subscriptionSubKey' in pool and pool['subscriptionSubKey'] == 'derived':
@@ -299,10 +299,10 @@ class StagePortal(object):
 
     def distributor_attached_subscriptions(self, uuid):
         """ Get available/attached subscriptions """
-        self.retr(self.con.ping, lambda res: res is not None, True, True)
+        self.retr(self.con.ping, lambda res: res is not None, 1, True, True)
         subscriptions = []
         ntry = 0
-        entitlements = self.retr(self.con.getEntitlementList, lambda res: res is not None, True, True, consumerId=uuid)
+        entitlements = self.retr(self.con.getEntitlementList, lambda res: res is not None, 1, True, True, consumerId=uuid)
         for entitlement in entitlements:
             serials = []
             for cert in entitlement['certificates']:
@@ -322,12 +322,12 @@ class StagePortal(object):
 
     def distributor_attach_subscriptions(self, uuid, subscriptions=None):
         """ Attach subscriptions to distributor """
-        self.retr(self.con.ping, lambda res: res is not None, True, True)
+        self.retr(self.con.ping, lambda res: res is not None, 1, True, True)
         if subscriptions is None:
             subscriptions = self.distributor_available_subscriptions(uuid)
         assert subscriptions is not None and subscriptions != [], "Nothing to attach"
         for sub in subscriptions:
-            bind = self.retr(self.con.bindByEntitlementPool, lambda res: res is not None, True, True, uuid, sub['id'], sub['quantity'])
+            bind = self.retr(self.con.bindByEntitlementPool, lambda res: res is not None, 1, True, True, uuid, sub['id'], sub['quantity'])
         return "<Response [200]>"
 
     def distributor_detach_subscriptions(self, uuid, subscriptions=[]):
@@ -344,12 +344,12 @@ class StagePortal(object):
         assert len(diff) == 0, "Can't detach subs: %s" % diff
         self.con.ping()
         for serial in detach_serials:
-            self.retr(self.con.unbindBySerial, lambda res: True, True, True, uuid, serial)
+            self.retr(self.con.unbindBySerial, lambda res: True, 1, True, True, uuid, serial)
         return "<Response [200]>"
 
     def distributor_download_manifest(self, uuid):
         """ Download manifest """
-        req = self.retr(requests.get, lambda res: res.status_code == 200, True, True,
+        req = self.retr(requests.get, lambda res: res.status_code == 200, 1, True, True,
                         "https://%s%s/consumers/%s/export" % (self.con.host, self.con.handler, uuid), verify=False, auth=(self.login, self.password))
         tf = tempfile.NamedTemporaryFile(delete=False, suffix=".zip")
         tf.write(req.content)
@@ -359,7 +359,7 @@ class StagePortal(object):
     def distributor_get_uuid(self, name):
         """ Get distributor uuid """
         session = self.portal_login()
-        req1 = self.retr(session.get, lambda res: res.status_code == 200, True, True,
+        req1 = self.retr(session.get, lambda res: res.status_code == 200, 1, True, True,
                          self.portal_url + "/management/distributors", verify=False, headers={'Accept-Language': 'en-US'})
         m = re.search("/distributors/([0-9,a-f,-]*)\">" + name + "<", req1.content, re.DOTALL)
         if m is not None:
@@ -370,8 +370,8 @@ class StagePortal(object):
 
     def delete_distributor(self, uuid):
         """ Delete distributor """
-        self.retr(self.con.ping, lambda res: res is not None, True, True)
-        self.retr(self.con.unregisterConsumer, lambda res: True, True, True, uuid)
+        self.retr(self.con.ping, lambda res: res is not None, 1, True, True)
+        self.retr(self.con.unregisterConsumer, lambda res: True, 1, True, True, uuid)
         return "<Response [200]>"
 
     @staticmethod
@@ -385,7 +385,7 @@ class StagePortal(object):
         if sys_name is None:
             sys_name = 'TestHypervisor' + ''.join(random.choice('0123456789ABCDEF') for i in range(6))
 
-        sys = self.retr(self.con.registerConsumer, lambda res: res is not None, True, True,
+        sys = self.retr(self.con.registerConsumer, lambda res: res is not None, 1, True, True,
                         name=sys_name, type={'id': '6', 'label': 'hypervisor', 'manifest': True}, facts={}, owner=org)
         logger.info("Hypervisor %s created with uid %s" % (sys_name, sys['uuid']))
         return (sys_name, sys['uuid'])
@@ -405,7 +405,7 @@ class StagePortal(object):
         facts['system.certificate_version'] = '3.2'
         facts['distribution.name'], facts['distribution.version'] = (dist_name, dist_version)
 
-        sys = self.retr(self.con.registerConsumer, lambda res: res is not None, True, True,
+        sys = self.retr(self.con.registerConsumer, lambda res: res is not None, 1, True, True,
                         name=sys_name, facts=facts, installed_products=installed_products, owner=org)
 
         logger.info("Sys %s created with uid %s" % (sys_name, sys['uuid']))
@@ -434,7 +434,7 @@ class StagePortal(object):
 
     def subscribe_systems(self, systems=None, csv_file=None, entitlement_dir=None, org=None, update=False):
         """ Subscribe systems """
-        self.retr(self.con.ping, lambda res: res is not None, True, True)
+        self.retr(self.con.ping, lambda res: res is not None, 1, True, True)
         if systems is None and csv_file is None:
             logger.error('Neither csv_file nor systems were specified!')
             return None
@@ -447,11 +447,11 @@ class StagePortal(object):
             all_systems = systems[::]
         else:
             all_systems = []
-            for consumer in self.retr(self.con.getConsumers, lambda res: res is not None, True, True, owner=org):
+            for consumer in self.retr(self.con.getConsumers, lambda res: res is not None, 1, True, True, owner=org):
                 # put physical systems in front
                 if not 'facts' in consumer:
                     # need to fetch additional data
-                    consumer = self.retr(self.con.getConsumer, lambda res: res is not None, True, True, consumer['uuid'])
+                    consumer = self.retr(self.con.getConsumer, lambda res: res is not None, 1, True, True, consumer['uuid'])
 
                 if consumer['facts']['virt.is_guest'] in [True, 'true', 'True']:
                     all_systems.append(consumer)
@@ -459,7 +459,7 @@ class StagePortal(object):
                     all_systems.insert(0, consumer)
 
         if org is None:
-            owners = self.retr(self.con.getOwnerList, lambda res: res is not None, True, True, self.login)
+            owners = self.retr(self.con.getOwnerList, lambda res: res is not None, 1, True, True, self.login)
             logger.debug("Owners: %s" % owners)
         else:
             owners = [org]
@@ -485,14 +485,14 @@ class StagePortal(object):
             pools = []
             if org is None:
                 for own in owners:
-                    own_pools = self.retr(self.con.getPoolsList, lambda res: res is not None, True, True, sys['uuid'], owner=own['key'])
+                    own_pools = self.retr(self.con.getPoolsList, lambda res: res is not None, 1, True, True, sys['uuid'], owner=own['key'])
                     pools += own_pools
             else:
-                pools = self.retr(self.con.getPoolsList, lambda res: res is not None, True, True, sys['uuid'], owner=org)
+                pools = self.retr(self.con.getPoolsList, lambda res: res is not None, 1, True, True, sys['uuid'], owner=org)
 
             existing_subs = []
             if update:
-                for ent in self.retr(self.con.getEntitlementList, lambda res: res is not None, True, True, sys['uuid']):
+                for ent in self.retr(self.con.getEntitlementList, lambda res: res is not None, 1, True, True, sys['uuid']):
                     existing_subs.append(ent['pool']['productId'])
 
             processed_subs = []
@@ -508,7 +508,7 @@ class StagePortal(object):
 
             if systems is None:
                 # we need to bind as customer
-                idcert = self.retr(self.con.getConsumer, lambda res: res is not None, True, True, sys['uuid'])
+                idcert = self.retr(self.con.getConsumer, lambda res: res is not None, 1, True, True, sys['uuid'])
                 tf_cert = tempfile.NamedTemporaryFile(delete=False, suffix=".pem")
                 tf_cert.write(idcert['idCert']['cert'])
                 tf_cert.close()
@@ -530,7 +530,7 @@ class StagePortal(object):
                     for pool_id in pool_ids:
                         maxtries_old = self.maxtries
                         self.maxtries = 2
-                        req = self.retr(con_client.bindByEntitlementPool, lambda res: res is not None, False, False, sys['uuid'], pool_id)
+                        req = self.retr(con_client.bindByEntitlementPool, lambda res: res is not None, 1, False, False, sys['uuid'], pool_id)
                         self.maxtries = maxtries_old
                         if req is not None:
                             attached = pool_id
@@ -540,11 +540,11 @@ class StagePortal(object):
                     else:
                         logger.error('Failed to find appropriate pool for system %s:%s' % (sys['name'], sys['uuid']))
             if update:
-                for ent in self.retr(client_con.getEntitlementList, lambda res: res is not None, True, True, sys['uuid']):
+                for ent in self.retr(client_con.getEntitlementList, lambda res: res is not None, 1, True, True, sys['uuid']):
                     if not ent['pool']['productId'] in processed_subs:
                         # unbinding everything else
                         serial = ent['certificates'][0]['serial']['serial']
-                        req = self.retr(client_con.unbindBySerial, lambda res: res is not None, True, True, sys['uuid'], serial)
+                        req = self.retr(client_con.unbindBySerial, lambda res: res is not None, 1, True, True, sys['uuid'], serial)
             if tf_cert is not None:
                 os.unlink(tf_cert.name)
             if tf_key is not None:
@@ -561,7 +561,7 @@ class StagePortal(object):
         all_systems = []
         host_systems = {}
 
-        self.retr(self.con.ping, lambda res: res is not None, True, True)
+        self.retr(self.con.ping, lambda res: res is not None, 1, True, True)
 
         data = csv.DictReader(open(csv_file))
         for row in data:
@@ -633,7 +633,7 @@ class StagePortal(object):
             host_detail = host_systems[host]
             if len(host_detail) > 1:
                 logger.debug("Setting host/guest allocation for %s, VMs: %s" % (host_detail[0], host_detail[1::]))
-                self.retr(self.con.updateConsumer, lambda res: True, True, True, host_detail[0], guest_uuids=host_detail[1::])
+                self.retr(self.con.updateConsumer, lambda res: True, 1, True, True, host_detail[0], guest_uuids=host_detail[1::])
 
         if subscribe:
             return self.subscribe_systems(systems=all_systems, csv_file=None, entitlement_dir=entitlement_dir, org=org, update=update)
@@ -641,7 +641,7 @@ class StagePortal(object):
 
     def heal_entire_org(self, owner=None, wait=False, timeout=None):
         if owner is None:
-            owner_list = self.retr(self.con.getOwnerList, lambda res: res is not None, True, True, self.con.username)
+            owner_list = self.retr(self.con.getOwnerList, lambda res: res is not None, 1, True, True, self.con.username)
             if owner_list is None or owner_list == []:
                 logger.error('Failed to get owner list')
                 return None
@@ -650,7 +650,7 @@ class StagePortal(object):
                     logger.info('There are multiple owners available, will heal the first one: %s' % owner_list[0]['key'])
                 owner = owner_list[0]['key']
         url = 'https://%s%s/owners/%s/entitlements' % (self.con.host, self.con.handler, owner)
-        req = self.retr(requests.post, lambda res: res.status_code == 202, True, True, url, auth=(self.con.username, self.con.password), verify=False)
+        req = self.retr(requests.post, lambda res: res.status_code == 202, 1, True, True, url, auth=(self.con.username, self.con.password), verify=False)
         if not wait:
             return req
         else:
