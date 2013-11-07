@@ -657,6 +657,18 @@ class StagePortal(object):
             # tmp
             return req
 
+    def get_pools(self, owner=None):
+        if owner is None:
+            owner_list = self.retr(self.con.getOwnerList, lambda res: res is not None, 1, True, True, self.con.username)
+            if owner_list is None or owner_list == []:
+                logger.error('Failed to get owner list')
+                return None
+            else:
+                if len(owner_list) > 1:
+                    logger.info('There are multiple owners available, will heal the first one: %s' % owner_list[0]['key'])
+                owner = owner_list[0]['key']
+        return self.retr(self.con.getPoolsList, lambda res: res is not None, 1, True, True, owner=owner)
+
 
 if __name__ == '__main__':
 
