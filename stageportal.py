@@ -669,6 +669,9 @@ class StagePortal(object):
                 owner = owner_list[0]['key']
         return self.retr(self.con.getPoolsList, lambda res: res is not None, 1, True, True, owner=owner)
 
+    def get_entitlements(self, uuid):
+        return self.retr(self.con.getEntitlementList, lambda res: res is not None, 1, True, True, uuid)
+
 
 if __name__ == '__main__':
 
