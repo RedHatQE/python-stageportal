@@ -672,6 +672,9 @@ class StagePortal(object):
     def get_entitlements(self, uuid):
         return self.retr(self.con.getEntitlementList, lambda res: res is not None, 1, True, True, uuid)
 
+    def get_owners(self):
+        return self.retr(self.con.getOwnerList, lambda res: res is not None, 1, True, True, self.con.username)
+
 
 if __name__ == '__main__':
 
