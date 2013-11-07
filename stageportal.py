@@ -675,6 +675,18 @@ class StagePortal(object):
     def get_owners(self):
         return self.retr(self.con.getOwnerList, lambda res: res is not None, 1, True, True, self.con.username)
 
+    def get_owner_info(self, owner=None):
+        if owner is None:
+            owner_list = self.retr(self.con.getOwnerList, lambda res: res is not None, 1, True, True, self.con.username)
+            if owner_list is None or owner_list == []:
+                logger.error('Failed to get owner list')
+                return None
+            else:
+                if len(owner_list) > 1:
+                    logger.info('There are multiple owners available, will heal the first one: %s' % owner_list[0]['key'])
+                owner = owner_list[0]['key']
+        return self.retr(self.con.getOwnerInfo, lambda res: res is not None, 1, True, True, owner)
+
 
 if __name__ == '__main__':
 
