@@ -15,18 +15,13 @@ import csv
 import datetime
 from rhsm import connection
 
-FORMAT = '%(asctime)s %(levelname)s %(message)s'
-logging.basicConfig(format=FORMAT)
-logger = logging.getLogger("python-stageportal")
-logger.setLevel(logging.INFO)
-
-
 class StagePortal(object):
     api_url = "http://example.com/svcrest"
     candlepin_url = "https://subs.example.com"
     portal_url = "https://access.example.com"
 
     def __init__(self, api_url=None, candlepin_url=None, portal_url=None, login='admin', password='admin', maxtries=40, insecure=None):
+        self.logger = logging.getLogger("python-stageportal")
         self.api_url = api_url
         self.candlepin_url = candlepin_url
         self.portal_url = portal_url
@@ -39,31 +34,31 @@ class StagePortal(object):
     def retr(self, func, check, sleep, blow_up, do_login, *args, **kwargs):
         res = None
         ntry = 0
-        logger.debug("Performing %s with args: %s kwargs %s" % (func, args, kwargs))
+        self.logger.debug("Performing %s with args: %s kwargs %s" % (func, args, kwargs))
         while ntry < self.maxtries:
             try:
                 res = func(*args, **kwargs)
             except Exception, e:
-                logger.debug("Exception during %s execution: %s" % (func, e))
+                self.logger.debug("Exception during %s execution: %s" % (func, e))
                 res = None
                 if do_login:
                     self.portal_login()
             try:
-                logger.debug("Checking %s after %s" % (res, func))
+                self.logger.debug("Checking %s after %s" % (res, func))
                 if check(res):
-                    logger.debug("Checking: passed")
+                    self.logger.debug("Checking: passed")
                     break
                 else:
-                    logger.debug("Checking: failed")
+                    self.logger.debug("Checking: failed")
                     res = None
             except Exception, e:
-                logger.debug("Checking: exception: %s" % e)
+                self.logger.debug("Checking: exception: %s" % e)
                 if do_login:
                     self.portal_login()
             ntry += 1
             time.sleep(sleep)
         if ntry >= self.maxtries:
-            logger.error("%s failed after %s tries" % (func, self.maxtries))
+            self.logger.error("%s failed after %s tries" % (func, self.maxtries))
             if blow_up is True:
                 assert False, "%s failed after %s tries" % (func, self.maxtries)
         return res
@@ -250,13 +245,13 @@ class StagePortal(object):
     def _get_subscriptions(self):
         self.retr(self.con.ping, lambda res: res is not None, 1, True, True)
         owners = self.retr(self.con.getOwnerList, lambda res: res is not None, 1, True, True, self.login)
-        logger.debug("Owners: %s" % owners)
+        self.logger.debug("Owners: %s" % owners)
         subscriptions = []
         for own in owners:
             pools = self.retr(self.con.getPoolsList, lambda res: res is not None, 1, True, True, owner=own['key'])
             for pool in pools:
                 subscriptions.append(pool['subscriptionId'])
-            logger.debug("Subscriptions: %s" % subscriptions)
+            self.logger.debug("Subscriptions: %s" % subscriptions)
         return set(subscriptions)
 
     def check_subscriptions(self, uid_list):
@@ -267,7 +262,7 @@ class StagePortal(object):
         if sub_set is not None:
             return "<Response [200]>"
         else:
-            logger.error("Can't find subscriptions")
+            self.logger.error("Can't find subscriptions")
             return None
 
     def create_distributor(self, name, distributor_version='sam-1.3'):
@@ -365,7 +360,7 @@ class StagePortal(object):
         if m is not None:
             return m.group(1)
         else:
-            logger.error("Can't find distributor: %s" % name)
+            self.logger.error("Can't find distributor: %s" % name)
             return None
 
     def delete_distributor(self, uuid):
@@ -387,7 +382,7 @@ class StagePortal(object):
 
         sys = self.retr(self.con.registerConsumer, lambda res: res is not None, 1, True, True,
                         name=sys_name, type={'id': '6', 'label': 'hypervisor', 'manifest': True}, facts={}, owner=org)
-        logger.info("Hypervisor %s created with uid %s" % (sys_name, sys['uuid']))
+        self.logger.info("Hypervisor %s created with uid %s" % (sys_name, sys['uuid']))
         return (sys_name, sys['uuid'])
 
     def _register_system(self, org=None, sys_name=None, cores=1, sockets=1, memory=2, arch='x86_64', dist_name='RHEL', dist_version='6.4', installed_products=[], is_guest=False, virt_uuid='', entitlement_dir=None):
@@ -408,14 +403,14 @@ class StagePortal(object):
         sys = self.retr(self.con.registerConsumer, lambda res: res is not None, 1, True, True,
                         name=sys_name, facts=facts, installed_products=installed_products, owner=org)
 
-        logger.info("Sys %s created with uid %s" % (sys_name, sys['uuid']))
+        self.logger.info("Sys %s created with uid %s" % (sys_name, sys['uuid']))
         if entitlement_dir is not None:
             try:
                 fd = open(entitlement_dir + '/%s.json' % sys_name, 'w')
                 fd.write(json.dumps(sys))
                 fd.close()
             except:
-                logger.error("Failed to write system data to %s" % entitlement_dir)
+                self.logger.error("Failed to write system data to %s" % entitlement_dir)
 
         return (sys_name, sys['uuid'])
 
@@ -436,11 +431,11 @@ class StagePortal(object):
         """ Subscribe systems """
         self.retr(self.con.ping, lambda res: res is not None, 1, True, True)
         if systems is None and csv_file is None:
-            logger.error('Neither csv_file nor systems were specified!')
+            self.logger.error('Neither csv_file nor systems were specified!')
             return None
 
         if systems is None and org is None:
-            logger.error('Neither org nor systems were specified!')
+            self.logger.error('Neither org nor systems were specified!')
             return None
 
         if systems is not None:
@@ -460,7 +455,7 @@ class StagePortal(object):
 
         if org is None:
             owners = self.retr(self.con.getOwnerList, lambda res: res is not None, 1, True, True, self.login)
-            logger.debug("Owners: %s" % owners)
+            self.logger.debug("Owners: %s" % owners)
         else:
             owners = [org]
 
@@ -501,7 +496,7 @@ class StagePortal(object):
                 if sys['name'] in ext_subs:
                     system_subs = ext_subs[sys['name']]
                 else:
-                    logger.error('No subscription data for %s:%s' % (sys['name'], sys['uuid']))
+                    self.logger.error('No subscription data for %s:%s' % (sys['name'], sys['uuid']))
                     system_subs = []
             else:
                 system_subs = sys['subscriptions']
@@ -536,9 +531,9 @@ class StagePortal(object):
                             attached = pool_id
                             break
                     if attached is not None:
-                        logger.info('Successfully subscribed system %s:%s to pool %s' % (sys['name'], sys['uuid'], attached))
+                        self.logger.info('Successfully subscribed system %s:%s to pool %s' % (sys['name'], sys['uuid'], attached))
                     else:
-                        logger.error('Failed to find appropriate pool for system %s:%s' % (sys['name'], sys['uuid']))
+                        self.logger.error('Failed to find appropriate pool for system %s:%s' % (sys['name'], sys['uuid']))
             if update:
                 for ent in self.retr(client_con.getEntitlementList, lambda res: res is not None, 1, True, True, sys['uuid']):
                     if not ent['pool']['productId'] in processed_subs:
@@ -609,7 +604,7 @@ class StagePortal(object):
                         elif consumer_type in ['hypervisor', 'Hypervisor']:
                             (sys_name, sys_uid) = self._register_hypervisor(org, name)
                         else:
-                            logger.error("Unknown consumer type %s for %s" % (consumer_type, name))
+                            self.logger.error("Unknown consumer type %s for %s" % (consumer_type, name))
                         break
                     except:
                         time.sleep(1)
@@ -626,13 +621,13 @@ class StagePortal(object):
                     if host_name in host_systems:
                         host_systems[host_name].append(name)
 
-        logger.debug("Host/guest allocation: %s" % host_systems)
+        self.logger.debug("Host/guest allocation: %s" % host_systems)
 
         for host in host_systems:
             # setting host/guest allocation
             host_detail = host_systems[host]
             if len(host_detail) > 1:
-                logger.debug("Setting host/guest allocation for %s, VMs: %s" % (host_detail[0], host_detail[1::]))
+                self.logger.debug("Setting host/guest allocation for %s, VMs: %s" % (host_detail[0], host_detail[1::]))
                 self.retr(self.con.updateConsumer, lambda res: True, 1, True, True, host_detail[0], guest_uuids=host_detail[1::])
 
         if subscribe:
@@ -643,11 +638,11 @@ class StagePortal(object):
         if owner is None:
             owner_list = self.retr(self.con.getOwnerList, lambda res: res is not None, 1, True, True, self.con.username)
             if owner_list is None or owner_list == []:
-                logger.error('Failed to get owner list')
+                self.logger.error('Failed to get owner list')
                 return None
             else:
                 if len(owner_list) > 1:
-                    logger.info('There are multiple owners available, will heal the first one: %s' % owner_list[0]['key'])
+                    self.logger.info('There are multiple owners available, will heal the first one: %s' % owner_list[0]['key'])
                 owner = owner_list[0]['key']
         url = 'https://%s%s/owners/%s/entitlements' % (self.con.host, self.con.handler, owner)
         req = self.retr(requests.post, lambda res: res.status_code == 202, 1, True, True, url, auth=(self.con.username, self.con.password), verify=False)
@@ -661,11 +656,11 @@ class StagePortal(object):
         if owner is None:
             owner_list = self.retr(self.con.getOwnerList, lambda res: res is not None, 1, True, True, self.con.username)
             if owner_list is None or owner_list == []:
-                logger.error('Failed to get owner list')
+                self.logger.error('Failed to get owner list')
                 return None
             else:
                 if len(owner_list) > 1:
-                    logger.info('There are multiple owners available, will heal the first one: %s' % owner_list[0]['key'])
+                    self.logger.info('There are multiple owners available, will heal the first one: %s' % owner_list[0]['key'])
                 owner = owner_list[0]['key']
         return self.retr(self.con.getPoolsList, lambda res: res is not None, 1, True, True, owner=owner)
 
@@ -679,16 +674,19 @@ class StagePortal(object):
         if owner is None:
             owner_list = self.retr(self.con.getOwnerList, lambda res: res is not None, 1, True, True, self.con.username)
             if owner_list is None or owner_list == []:
-                logger.error('Failed to get owner list')
+                self.logger.error('Failed to get owner list')
                 return None
             else:
                 if len(owner_list) > 1:
-                    logger.info('There are multiple owners available, will heal the first one: %s' % owner_list[0]['key'])
+                    self.logger.info('There are multiple owners available, will heal the first one: %s' % owner_list[0]['key'])
                 owner = owner_list[0]['key']
         return self.retr(self.con.getOwnerInfo, lambda res: res is not None, 1, True, True, owner)
 
 
 if __name__ == '__main__':
+    FORMAT = '%(asctime)s %(levelname)s %(message)s'
+    logging.basicConfig(format=FORMAT)
+    logging.getLogger("python-stageportal").setLevel(logging.INFO)
 
     PWLESS_ACTIONS = ['user_get',
                       'sku_add']
@@ -711,7 +709,7 @@ if __name__ == '__main__':
     [args, ignored_args] = argparser.parse_known_args()
 
     if args.verbose:
-        logger.setLevel(logging.DEBUG)
+        logging.getLogger("python-stageportal").setLevel(logging.INFO)
 
     portal_required = False
     if args.action in ['distributor_get_manifest']:
