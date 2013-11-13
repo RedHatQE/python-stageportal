@@ -258,7 +258,7 @@ class StagePortal(object):
         """ Check subscription status """
         ntry = 0
         uid_set = set([str(uid) for uid in uid_list])
-        sub_set = self.retr(self._get_subscriptions, lambda res: uid_set <= res, 5, False, True)
+        sub_set = self.retr(self._get_subscriptions, lambda res: uid_set <= res, 30, False, True)
         if sub_set is not None:
             return "<Response [200]>"
         else:
