@@ -693,6 +693,9 @@ class StagePortal(object):
                 owner = owner_list[0]['key']
         return self.retr(self.con.getOwnerInfo, lambda res: res is not None, 1, True, True, owner)
 
+    def checkin_consumer(self, uuid):
+        return self.retr(self.con.checkin, lambda res: res is not None, 1, True, True, uuid)
+
 
 if __name__ == '__main__':
     FORMAT = '%(asctime)s %(levelname)s %(message)s'
