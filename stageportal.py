@@ -512,7 +512,7 @@ class StagePortal(object):
             else:
                 system_subs = sys['subscriptions']
 
-            if systems is None:
+            if org is not None:
                 # we need to bind as customer
                 idcert = self.retr(self.con.getConsumer, lambda res: res is not None, 1, True, True, sys['uuid'])
                 tf_cert = tempfile.NamedTemporaryFile(delete=False, suffix=".pem")
