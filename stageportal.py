@@ -15,6 +15,11 @@ import csv
 import datetime
 from rhsm import connection
 
+
+class StagePortalException(Exception):
+    pass
+
+
 class StagePortal(object):
     api_url = "http://example.com/svcrest"
     candlepin_url = "https://subs.example.com"
@@ -40,7 +45,6 @@ class StagePortal(object):
                 res = func(*args, **kwargs)
             except Exception, e:
                 self.logger.debug("Exception during %s execution: %s" % (func, e))
-                res = None
                 if do_login:
                     self.portal_login()
             try:
@@ -50,7 +54,6 @@ class StagePortal(object):
                     break
                 else:
                     self.logger.debug("Checking: failed")
-                    res = None
             except Exception, e:
                 self.logger.debug("Checking: exception: %s" % e)
                 if do_login:
@@ -58,9 +61,11 @@ class StagePortal(object):
             ntry += 1
             time.sleep(sleep)
         if ntry >= self.maxtries:
-            self.logger.error("%s failed after %s tries" % (func, self.maxtries))
+            self.logger.error("%s failed after %s tries, last result: %s" % (func, self.maxtries, res))
             if blow_up is True:
-                assert False, "%s failed after %s tries" % (func, self.maxtries)
+                raise StagePortalException("%s failed after %s tries, last result: %s" % (func, self.maxtries, res))
+            else:
+                res = None
         return res
 
     def get_user(self):
@@ -320,7 +325,8 @@ class StagePortal(object):
         self.retr(self.con.ping, lambda res: res is not None, 1, True, True)
         if subscriptions is None:
             subscriptions = self.distributor_available_subscriptions(uuid)
-        assert subscriptions is not None and subscriptions != [], "Nothing to attach"
+        if subscriptions is None or subscriptions == []:
+            raise StagePortalException("Nothing to attach")
         for sub in subscriptions:
             bind = self.retr(self.con.bindByEntitlementPool, lambda res: res is not None, 1, True, True, uuid, sub['id'], sub['quantity'])
         return "<Response [200]>"
@@ -336,7 +342,8 @@ class StagePortal(object):
                 detach_serials += sub['serials']
                 detach_subs.append(sub['id'])
         diff = list(set(subscriptions) - set(detach_subs))
-        assert len(diff) == 0, "Can't detach subs: %s" % diff
+        if len(diff) != 0:
+             raise StagePortalException("Can't detach subs: %s" % diff)
         self.con.ping()
         for serial in detach_serials:
             self.retr(self.con.unbindBySerial, lambda res: True, 1, True, True, uuid, serial)
@@ -351,7 +358,7 @@ class StagePortal(object):
         tf.close()
         return tf.name
 
-    def distributor_get_uuid(self, name):
+    def _get_distributor_page(self, name):
         """ Get distributor uuid """
         session = self.portal_login()
         req1 = self.retr(session.get, lambda res: res.status_code == 200, 1, True, True,
@@ -360,8 +367,12 @@ class StagePortal(object):
         if m is not None:
             return m.group(1)
         else:
-            self.logger.error("Can't find distributor: %s" % name)
             return None
+
+    def distributor_get_uuid(self, name):
+        """ Get distributor uuid """
+        uuid = self.retr(self._get_distributor_page, lambda res: res is not None, 1, True, False, name)
+        return uuid
 
     def delete_distributor(self, uuid):
         """ Delete distributor """
