@@ -404,8 +404,8 @@ class StagePortal(object):
         facts['virt.is_guest'] = is_guest
         if is_guest:
             facts['virt.uuid'] = virt_uuid
-        facts['cpu.core(s)_per_socket'] = str(cores)
-        facts['cpu.cpu_socket(s)'] = str(sockets)
+        facts['cpu.core(s)_per_socket'] = cores / sockets
+        facts['cpu.cpu_socket(s)'] = sockets
         facts['memory.memtotal'] = str(int(memory) * 1024 * 1024)
         facts['uname.machine'] = arch
         facts['system.certificate_version'] = '3.2'
@@ -573,8 +573,8 @@ class StagePortal(object):
         for row in data:
             num = 0
             total = int(row['Count'])
-            cores = row['Cores']
-            sockets = row['Sockets']
+            cores = int(row['Cores'])
+            sockets = int(row['Sockets'])
             memory = row['RAM']
             arch = row['Arch']
             if row['OS'].find(' ') != -1:
