@@ -404,9 +404,12 @@ class StagePortal(object):
         facts['virt.is_guest'] = is_guest
         if is_guest:
             facts['virt.uuid'] = virt_uuid
-        facts['cpu.core(s)_per_socket'] = cores / sockets
-        facts['cpu.cpu_socket(s)'] = sockets
-        facts['memory.memtotal'] = str(int(memory) * 1024 * 1024)
+        if sockets is not None:
+            facts['cpu.cpu_socket(s)'] = sockets
+            if cores is not None:
+                facts['cpu.core(s)_per_socket'] = cores / sockets
+        if memory is not None:
+            facts['memory.memtotal'] = str(memory * 1024 * 1024)
         facts['uname.machine'] = arch
         facts['system.certificate_version'] = '3.2'
         facts['distribution.name'], facts['distribution.version'] = (dist_name, dist_version)
@@ -573,9 +576,18 @@ class StagePortal(object):
         for row in data:
             num = 0
             total = int(row['Count'])
-            cores = int(row['Cores'])
-            sockets = int(row['Sockets'])
-            memory = row['RAM']
+            try:
+                cores = int(row['Cores'])
+            except ValueError:
+                cores = None
+            try:
+                sockets = int(row['Sockets'])
+            except ValueError:
+                sockets = None
+            try:
+                memory = int(row['RAM'])
+            except ValueError:
+                memory = None
             arch = row['Arch']
             if row['OS'].find(' ') != -1:
                 dist_name, dist_version = row['OS'].split(' ')
