@@ -24,15 +24,15 @@ Requires:	python-requests python-rhsm
 %install
 mkdir -p $RPM_BUILD_ROOT%{python_sitelib}/
 mkdir -p $RPM_BUILD_ROOT%{_bindir}
-cp stageportal.py $RPM_BUILD_ROOT%{python_sitelib}/
-cp stageportal $RPM_BUILD_ROOT%{_bindir}
+cp stageportal $RPM_BUILD_ROOT%{python_sitelib}/
+cp bin/stageportal $RPM_BUILD_ROOT%{_bindir}
 %clean
 rm -rf $RPM_BUILD_ROOT
 
 %files
 %defattr(-,root,root,-)
 %doc COPYING
-%{python_sitelib}/*.py*
+%{python_sitelib}/stageportal/*.py*
 %{_bindir}/stageportal
 
 %changelog
