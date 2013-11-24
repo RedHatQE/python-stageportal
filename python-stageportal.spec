@@ -24,7 +24,7 @@ Requires:	python-requests python-rhsm
 %install
 mkdir -p $RPM_BUILD_ROOT%{python_sitelib}/
 mkdir -p $RPM_BUILD_ROOT%{_bindir}
-cp stageportal $RPM_BUILD_ROOT%{python_sitelib}/
+cp -r stageportal $RPM_BUILD_ROOT%{python_sitelib}/
 cp bin/stageportal $RPM_BUILD_ROOT%{_bindir}
 %clean
 rm -rf $RPM_BUILD_ROOT
