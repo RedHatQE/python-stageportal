@@ -2,3 +2,4 @@
 *.py[cod]
 test*.sh
 test*.csv
+*egg-info
