@@ -47,15 +47,15 @@ class StagePortal(BasePortal):
         s.verify = False
 
         req1 = self._retr(s.post, lambda res: res.status_code == 200, 1, True, None, url,
-                         data={'_flowId': 'legacy-login-flow', 'failureRedirect': url,
-                               'username': self.login, 'password': self.password},
-                         headers={'Accept-Language': 'en-US'})
+                          data={'_flowId': 'legacy-login-flow', 'failureRedirect': url,
+                                'username': self.login, 'password': self.password},
+                          headers={'Accept-Language': 'en-US'})
         if req1.content.find('Welcome&nbsp;') == -1:
             # Accepting terms
             req_checker = lambda res: res.status_code == 200 and (res.content.find('Open Source Assurance Agreement Acceptance Confirmation') != -1 or res.content.find('Welcome&nbsp;') == -1)
             req2 = self._retr(s.post, req_checker, 1, True, None, url, params={'_flowId': 'legacy-login-flow', '_flowExecutionKey': 'e1s1'},
-                             data={'accepted': 'true', '_accepted': 'on', 'optionalTerms_28': 'accept', '_eventId_submit': 'Continue', '_flowExecutionKey': 'e1s1', 'redirect': ''})
-        req3 = self._retr(s.get, lambda res: res.status_code == 200, 1, True, None, self.portal_url + "/management/" , verify=False, headers={'Accept-Language': 'en-US'})
+                              data={'accepted': 'true', '_accepted': 'on', 'optionalTerms_28': 'accept', '_eventId_submit': 'Continue', '_flowExecutionKey': 'e1s1', 'redirect': ''})
+        req3 = self._retr(s.get, lambda res: res.status_code == 200, 1, True, None, self.portal_url + "/management/", verify=False, headers={'Accept-Language': 'en-US'})
         return s
 
     def _get_subscriptions(self):
@@ -85,7 +85,7 @@ class StagePortal(BasePortal):
         """ Create new distributor on portal"""
         self._retr(self.con.ping, lambda res: res is not None, 1, True, self.portal_login)
         distributor = self._retr(self.con.registerConsumer, lambda res: 'uuid' in res, 1, True, self.portal_login,
-                                name=name, type={'id': '5', 'label': 'sam', 'manifest': True}, facts={'distributor_version': distributor_version})
+                                 name=name, type={'id': '5', 'label': 'sam', 'manifest': True}, facts={'distributor_version': distributor_version})
         return distributor['uuid']
 
     def distributor_available_subscriptions(self, uuid):
@@ -154,7 +154,7 @@ class StagePortal(BasePortal):
                 detach_subs.append(sub['id'])
         diff = list(set(subscriptions) - set(detach_subs))
         if len(diff) != 0:
-             raise StagePortalException("Can't detach subs: %s" % diff)
+            raise StagePortalException("Can't detach subs: %s" % diff)
         self.con.ping()
         for serial in detach_serials:
             self._retr(self.con.unbindBySerial, lambda res: True, 1, True, self.portal_login, uuid, serial)
@@ -163,7 +163,7 @@ class StagePortal(BasePortal):
     def distributor_download_manifest(self, uuid):
         """ Download manifest """
         req = self._retr(requests.get, lambda res: res.status_code == 200, 1, True, self.portal_login,
-                        "https://%s%s/consumers/%s/export" % (self.con.host, self.con.handler, uuid), verify=False, auth=(self.login, self.password))
+                         "https://%s%s/consumers/%s/export" % (self.con.host, self.con.handler, uuid), verify=False, auth=(self.login, self.password))
         tf = tempfile.NamedTemporaryFile(delete=False, suffix=".zip")
         tf.write(req.content)
         tf.close()
@@ -173,7 +173,7 @@ class StagePortal(BasePortal):
         """ Get distributor uuid """
         session = self.portal_login()
         req1 = self._retr(session.get, lambda res: res.status_code == 200, 1, True, self.portal_login,
-                         self.portal_url + "/management/distributors", verify=False, headers={'Accept-Language': 'en-US'})
+                          self.portal_url + "/management/distributors", verify=False, headers={'Accept-Language': 'en-US'})
         m = re.search("/distributors/([0-9,a-f,-]*)\">" + name + "<", req1.content, re.DOTALL)
         if m is not None:
             return m.group(1)
@@ -196,7 +196,7 @@ class StagePortal(BasePortal):
             sys_name = 'TestHypervisor' + ''.join(random.choice('0123456789ABCDEF') for i in range(6))
 
         sys = self._retr(self.con.registerConsumer, lambda res: res is not None, 1, True, self.portal_login,
-                        name=sys_name, type={'id': '6', 'label': 'hypervisor', 'manifest': True}, facts={}, owner=org)
+                         name=sys_name, type={'id': '6', 'label': 'hypervisor', 'manifest': True}, facts={}, owner=org)
         self.logger.info("Hypervisor %s created with uid %s" % (sys_name, sys['uuid']))
         return (sys_name, sys['uuid'])
 
@@ -219,7 +219,7 @@ class StagePortal(BasePortal):
         facts['distribution.name'], facts['distribution.version'] = (dist_name, dist_version)
 
         sys = self._retr(self.con.registerConsumer, lambda res: res is not None, 1, True, self.portal_login,
-                        name=sys_name, facts=facts, installed_products=installed_products, owner=org)
+                         name=sys_name, facts=facts, installed_products=installed_products, owner=org)
 
         self.logger.info("Sys %s created with uid %s" % (sys_name, sys['uuid']))
         if entitlement_dir is not None:
@@ -338,7 +338,7 @@ class StagePortal(BasePortal):
                 processed_subs.append(sub['productId'])
                 if not sub['productId'] in existing_subs:
                     # we need to attach sub
-                    pool_ids =  self._get_suitable_pools(pools, sub['productId'], sys['facts']['virt.is_guest'])
+                    pool_ids = self._get_suitable_pools(pools, sub['productId'], sys['facts']['virt.is_guest'])
                     attached = None
                     for pool_id in pool_ids:
                         maxtries_old = self.maxtries
@@ -437,7 +437,7 @@ class StagePortal(BasePortal):
                         time.sleep(1)
                         ntry += 1
 
-                all_systems.append({'name': sys_name, 'uuid': sys_uid, 'subscriptions': subscriptions, 'facts':{'virt.is_guest': is_guest}})
+                all_systems.append({'name': sys_name, 'uuid': sys_uid, 'subscriptions': subscriptions, 'facts': {'virt.is_guest': is_guest}})
 
                 if row['Host'] is not None and row['Host'] != '':
                     host_name = self._namify(row['Host'], num)

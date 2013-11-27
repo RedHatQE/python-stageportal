@@ -214,7 +214,6 @@ class BasePortal(object):
                 except:
                     start_date = row['Start Date']
             else:
-                 start_date = datetime.datetime.now().strftime("%Y-%m-%d")
+                start_date = datetime.datetime.now().strftime("%Y-%m-%d")
             sku_list.append({'Id': row['Id'], 'Quantity': row['Quantity'], 'Start Date': start_date})
         return self.add_skus(sku_list)
-

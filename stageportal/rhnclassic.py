@@ -28,7 +28,7 @@ class RhnClassicPortal(BasePortal):
 
     @staticmethod
     def _gen_uuid(name, dashed=True):
-        md5 =  hashlib.md5(name).hexdigest()
+        md5 = hashlib.md5(name).hexdigest()
         if dashed:
             return md5[0:8] + '-' + md5[8:12] + '-' + md5[12:16] + '-' + md5[16:20] + '-' + md5[20:]
         else:
@@ -116,7 +116,7 @@ class RhnClassicPortal(BasePortal):
             info.append((ut, 'exists', 'domain', {'memory_size': guest_info['memory'],
                                                   'name': guest,
                                                   'state': 'running',
-                                                  'uuid':  self._gen_uuid(guest, False),
+                                                  'uuid': self._gen_uuid(guest, False),
                                                   'vcpus': guest_info['cores'],
                                                   'virt_type': 'fully_virtualized'}))
         info.append((ut, 'crawl_ended', 'system', {}))
@@ -129,7 +129,7 @@ class RhnClassicPortal(BasePortal):
         if not system in self.systems:
             raise RhnClassicPortalException("System %s is not in systems list" % system)
         session_id = self._retr(self.rpc_api._request, lambda res: res is not None, 1, True, None, 'auth.login', (self.login, self.password))
-        child_channels = self._retr(self.rpc_api._request, lambda res: res is not None, 1, True, None, 'system.listChildChannels', (session_id, int(self.systems[system]['info']['system_id'].replace('ID-',''))))
+        child_channels = self._retr(self.rpc_api._request, lambda res: res is not None, 1, True, None, 'system.listChildChannels', (session_id, int(self.systems[system]['info']['system_id'].replace('ID-', ''))))
         return child_channels
 
     def _add_child_channels(self, system, channels):
