@@ -22,18 +22,19 @@ Requires:	python-requests python-rhsm
 %build
 
 %install
-mkdir -p $RPM_BUILD_ROOT%{python_sitelib}/
+%{__python} setup.py install -O1 --root $RPM_BUILD_ROOT
 mkdir -p $RPM_BUILD_ROOT%{_bindir}
-cp -r stageportal $RPM_BUILD_ROOT%{python_sitelib}/
 cp bin/stageportal $RPM_BUILD_ROOT%{_bindir}
+
 %clean
 rm -rf $RPM_BUILD_ROOT
 
 %files
 %defattr(-,root,root,-)
 %doc COPYING
-%{python_sitelib}/stageportal/*.py*
 %{_bindir}/stageportal
+%{python_sitelib}/stageportal/*.py*
+%{python_sitelib}/*.egg-info
 
 %changelog
 * Tue Jul 30 2013 Vitaly Kuznetsov <vitty@redhat.com> 0.1-1
