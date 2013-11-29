@@ -6,6 +6,7 @@ import csv
 import requests
 import json
 import time
+import datetime
 
 
 class BasePortalException(Exception):
