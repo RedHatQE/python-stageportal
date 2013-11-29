@@ -70,11 +70,15 @@ class StagePortal(BasePortal):
             self.logger.debug("Subscriptions: %s" % subscriptions)
         return set(subscriptions)
 
-    def check_subscriptions(self, uid_list):
+    def check_subscriptions(self, uid_list, external_heal = None):
         """ Check subscription status """
         ntry = 0
         uid_set = set([str(uid) for uid in uid_list])
-        sub_set = self._retr(self._get_subscriptions, lambda res: uid_set <= res, 30, False, self.portal_login)
+        if not external_heal:
+            heal = self.portal_login
+        else:
+            heal = lambda: (external_heal(), self.portal_login())
+        sub_set = self._retr(self._get_subscriptions, lambda res: uid_set <= res, 30, False, heal)
         if sub_set is not None:
             return "<Response [200]>"
         else:
