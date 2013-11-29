@@ -98,7 +98,7 @@ class RhnClassicPortal(BasePortal):
                      u'hostname': sys_name,
                      u'ipaddr': u'1.2.3.4'}]
 
-        details = self._retr(self.rpc._request, lambda res: res is not None, 1, True, 'registration.add_hw_profile', (details, hardware))
+        details = self._retr(self.rpc._request, lambda res: res is not None, 1, True, None, 'registration.add_hw_profile', (details, hardware))
         return details
 
     def _set_virt_host(self, host, guest_ids):
@@ -199,3 +199,9 @@ class RhnClassicPortal(BasePortal):
                 raise RhnClassicPortalException("Failed to set host/guest allocation for %s (guests: %s)" % (host, host_systems[host]))
 
         return self.systems
+
+    def get_rhn_content(self, system, repo, package, verify=False):
+        if not system in self.systems:
+            raise RhnClassicPortalException("System %s is not in systems list" % system)
+        headers = self._retr(self.rpc._request, lambda res: res is not None, 1, True, None, 'up2date.login', (self.systems[system]['details'], ))
+        return requests.get("%s/GET-REQ/%s/getPackage/%s" % (self.xmlrpc_url, repo, package), headers=headers, verify=verify)
