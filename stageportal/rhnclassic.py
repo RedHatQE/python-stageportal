@@ -59,7 +59,13 @@ class RhnClassicPortal(BasePortal):
                             params[name] = strval
         return params
 
-    def _register_system(self, sys_name=None, cores=1, memory=2, arch='x86_64', release_name='redhat-release-server', dist_version='6Server', is_guest=False, org_id=None):
+    def _get_num_id(self, system):
+        return int(self.systems[system]['info']['system_id'].replace('ID-', ''))
+
+    def _get_login_token(self):
+        return self._retr(self.rpc_api._request, lambda res: res is not None, 1, True, None, 'auth.login', (self.login, self.password))
+
+    def _register_system(self, sys_name=None, cores=1, memory=2, arch='x86_64', release_name='redhat-release-server', dist_version='6Server', is_guest=False, org_id=None, basechannel=None):
         system = {'username': self.login,
                   'password': self.password,
                   'release_name': release_name,
@@ -77,6 +83,9 @@ class RhnClassicPortal(BasePortal):
 
         if org_id is not None and org_id != '':
             system['org_id'] = org_id
+
+        if basechannel is not None and basechannel != '':
+            system['channel'] = basechannel
 
         self.logger.debug('Registering system %s' % system)
         details = self._retr(self.rpc._request, lambda res: res is not None, 1, True, None, 'registration.new_system', (system,))
@@ -129,12 +138,18 @@ class RhnClassicPortal(BasePortal):
         self.logger.debug("Result: %s" % details)
         return details
 
-    def _list_child_channels(self, system):
+    def _systems_api_call(self, api, system):
         if not system in self.systems:
             raise RhnClassicPortalException("System %s is not in systems list" % system)
-        session_id = self._retr(self.rpc_api._request, lambda res: res is not None, 1, True, None, 'auth.login', (self.login, self.password))
-        child_channels = self._retr(self.rpc_api._request, lambda res: res is not None, 1, True, None, 'system.listChildChannels', (session_id, int(self.systems[system]['info']['system_id'].replace('ID-', ''))))
-        return child_channels
+        session_id = self._get_login_token()
+        result = self._retr(self.rpc_api._request, lambda res: res is not None, 1, True, None, 'system.%s' % api, (session_id, self._get_num_id(system)))
+        return result
+
+    def _list_child_channels(self, system):
+        return self._systems_api_call('listChildChannels', system)
+
+    def _get_entitlements(self, system):
+        return self._systems_api_call('getEntitlements', system)
 
     def _add_child_channels(self, system, channels):
         if not system in self.systems:
@@ -142,11 +157,17 @@ class RhnClassicPortal(BasePortal):
         req = self._retr(self.rpc._request, lambda res: res is not None, 1, True, None, 'up2date.subscribeChannels', (self.systems[system]['details'], channels, self.login, self.password))
         return req
 
+    def _list_channels(self, system):
+        if not system in self.systems:
+            raise RhnClassicPortalException("System %s is not in systems list" % system)
+        req = self._retr(self.rpc._request, lambda res: res is not None, 1, True, None, 'up2date.listChannels', (self.systems[system]['details'], ))
+        return req
+
     def create_systems(self, csv_file, org=None):
         """
         Register a bunch of systems from CSV file
 
-        # CSV: Name,Count,Org Label,Virtual,Host,Release,Version,Arch,RAM,Cores,Child Channels
+        # CSV: Name,Count,Org Label,Virtual,Host,Release,Version,Arch,RAM,Cores,Base Channel,Child Channels
         """
         host_systems = {}
 
@@ -166,6 +187,7 @@ class RhnClassicPortal(BasePortal):
             release = row['Release']
             version = row['Version']
             org = row['Org Label']
+            basechannel = row['Base Channel']
 
             channels = []
             if row['Child Channels']:
@@ -180,7 +202,7 @@ class RhnClassicPortal(BasePortal):
                 else:
                     is_guest = False
 
-                if self._register_system(name, cores, memory, arch, release, version, is_guest, org) is None:
+                if self._register_system(name, cores, memory, arch, release, version, is_guest, org, basechannel) is None:
                     raise RhnClassicPortalException("Failed to register system %s" % name)
 
                 if channels != []:
