@@ -1,5 +1,6 @@
 import argparse
 import logging
+import sys
 
 from baseportal import *
 
@@ -114,7 +115,7 @@ if __name__ == '__main__':
 
     if args.action == 'systems_register_classic':
         from rhnclassic import *
-        sp = RhnClassicPortal(xmlrpc_urll=xmlrpc, login=args.login, password=args.password)
+        sp = RhnClassicPortal(xmlrpc_url=xmlrpc, login=args.login, password=args.password)
     else:
         from smportal import *
         sp = SMPortal(api_url=api, candlepin_url=candlepin, portal_url=portal, login=args.login, password=args.password)
