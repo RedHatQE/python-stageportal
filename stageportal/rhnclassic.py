@@ -7,7 +7,11 @@ import hashlib
 import xml.etree.ElementTree as ET
 import csv
 
-from rhn import rpclib
+try:
+    from rhn import rpclib
+except ImportError:
+    # try to avoid dependency
+    pass
 
 from baseportal import *
 
