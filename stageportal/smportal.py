@@ -381,6 +381,9 @@ class SMPortal(BasePortal):
 
         data = csv.DictReader(open(csv_file))
         for row in data:
+            if row['Name'].startswith('#'):
+                self.logger.debug("Skipping %s" % row['Name'])
+                continue
             num = 0
             total = int(row['Count'])
             try:

@@ -91,12 +91,11 @@ class RhnClassicPortal(BasePortal):
         details = self._retr(self.rpc._request, lambda res: res is not None, 1, True, None, 'registration.new_system', (system,))
         self.logger.debug('Got %s' % details)
 
-        self.systems[sys_name] = {'details': details, 'memory': str(memory * 1024), 'cores': cores, 'info': self._parse_system_details(details)}
+        self.systems[sys_name] = {'details': details, 'info': self._parse_system_details(details)}
 
         hardware = [{u'bogomips': u'1234.56',
                      u'cache': u'8192 KB',
                      u'class': u'CPU',
-                     u'count': cores,
                      u'desc': u'Processor',
                      u'model': u'Intel(R) Xeon(R) CPU           W3550  @ 3.07GHz',
                      u'model_number': u'6',
@@ -106,10 +105,15 @@ class RhnClassicPortal(BasePortal):
                      u'platform': u'x86_64',
                      u'speed': 1595,
                      u'type': u'GenuineIntel'},
-                    {u'class': u'MEMORY', u'ram': str(memory * 1024), u'swap': str(memory * 2048)},
                     {u'class': u'NETINFO',
                      u'hostname': sys_name,
                      u'ipaddr': u'1.2.3.4'}]
+        if memory is not None:
+            hardware.append({u'class': u'MEMORY', u'ram': str(memory * 1024), u'swap': str(memory * 2048)})
+            self.systems[sys_name]['memory'] = str(memory * 1024)
+        if cores is not None:
+            hardware[0]['count'] = cores
+            self.systems[sys_name]['cores'] = cores
 
         details = self._retr(self.rpc._request, lambda res: res is not None, 1, True, None, 'registration.add_hw_profile', (details, hardware))
         return details
@@ -173,6 +177,9 @@ class RhnClassicPortal(BasePortal):
 
         data = csv.DictReader(open(csv_file))
         for row in data:
+            if row['Name'].startswith('#'):
+                self.logger.debug("Skipping %s" % row['Name'])
+                continue
             num = 0
             total = int(row['Count'])
             try:
