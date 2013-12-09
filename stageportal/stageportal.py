@@ -31,7 +31,7 @@ if __name__ == '__main__':
     [args, ignored_args] = argparser.parse_known_args()
 
     if args.verbose:
-        logging.getLogger("python-stageportal").setLevel(logging.INFO)
+        logging.getLogger("python-stageportal").setLevel(logging.DEBUG)
 
     portal_required = False
     if args.action in ['distributor_get_manifest']:
