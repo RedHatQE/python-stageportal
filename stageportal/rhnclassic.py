@@ -30,9 +30,8 @@ class RhnClassicPortal(BasePortal):
         self.rpc_api = rpclib.Server(xmlrpc_url.replace('/XMLRPC', '/rpc/api'))
         self.systems = {}
 
-    @staticmethod
-    def _gen_uuid(name, dashed=True):
-        md5 = hashlib.md5(name).hexdigest()
+    def _gen_uuid(self, name, dashed=True):
+        md5 = hashlib.md5(self.login + name).hexdigest()
         if dashed:
             return md5[0:8] + '-' + md5[8:12] + '-' + md5[12:16] + '-' + md5[16:20] + '-' + md5[20:]
         else:
