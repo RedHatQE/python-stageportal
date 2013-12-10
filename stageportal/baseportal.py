@@ -37,10 +37,13 @@ class BasePortal(object):
         ntry = 0
         self.logger.debug("Performing %s with args: %s kwargs %s" % (func, args, kwargs))
         while ntry < self.maxtries:
+            exc_message = None
+            res = None
             try:
                 res = func(*args, **kwargs)
             except Exception, e:
-                self.logger.debug("Exception during %s execution: %s" % (func, e))
+                exc_message = "Exception during %s execution: %s" % (func, e)
+                self.logger.debug(exc_message)
             try:
                 self.logger.debug("Checking %s after %s" % (res, func))
                 if check(res):
@@ -49,14 +52,21 @@ class BasePortal(object):
                 else:
                     self.logger.debug("Checking: failed")
             except Exception, e:
-                self.logger.debug("Checking: exception: %s" % e)
+                exc_message = "Checking: exception: %s" % e
+                self.logger.debug(exc_message)
             if heal_func is not None:
                 self.logger.debug("Doing heal func %s" % heal_func)
                 heal_func()
             ntry += 1
             time.sleep(sleep)
         if ntry >= self.maxtries:
-            self.logger.error("%s failed after %s tries, last result: %s" % (func, self.maxtries, res))
+            if res is not None:
+                self.logger.error("%s (args: %s, kwargs %s) failed after %s tries, last result: %s" % (func, args, kwargs, self.maxtries, res))
+            elif exc_message is not None:
+                self.logger.error("%s (args: %s, kwargs %s) failed after %s tries, last exception: %s" % (func, args, kwargs, self.maxtries, exc_message))
+            else:
+                self.logger.error("%s (args: %s, kwargs %s) failed after %s tries" % (func, args, kwargs, self.maxtries))
+
             if blow_up is True:
                 raise BasePortalException("%s failed after %s tries, last result: %s" % (func, self.maxtries, res))
             else:
