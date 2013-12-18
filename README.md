@@ -20,9 +20,13 @@ CLI usage example
 	$python stageportal.py --login samplecustomer01 --password changeme --portal $PORTAL --candlepin $CANDLEPIN --action subscriptions_check --sub-ids 2687709
 	<Response [200]>
 
-	# Creating distributor
+	# Creating SAM distributor
 	$python stageportal.py --login samplecustomer01 --password changeme --portal $PORTAL --candlepin $CANDLEPIN --action distributor_create --distributor-name sam1
 	c2f87b08-69da-4ed4-9995-b7c5b225d453
+
+	# Creating Satellite5 (Spacewalk) distributor
+	$python stageportal.py --login samplecustomer01 --password changeme --portal $PORTAL --candlepin $CANDLEPIN --action satellite_create --distributor-name sam1
+	2947b137-f29a-4b9d-938a-03e01ca76f1f
 	
 	# Listing subscriptions available for attaching to distributor
 	$python stageportal.py --login samplecustomer01 --password changeme --candlepin $CANDLEPIN --portal $PORTAL --action distributor_available_subscriptions --distributor-name sam1
@@ -53,9 +57,13 @@ CLI usage example
 	$python stageportal.py --login samplecustomer01 --password changeme --candlepin $CANDLEPIN --portal $PORTAL --action distributor_detach_subscriptions --distributor-name sam1 --sub-ids 8a99f98340a67e350140bf6d92e77066
 	<Response [200]>
 
-	# Downloading manifest
-	$python stageportal.py --login samplecustomer01 --password changeme --portal $PORTAL --candlepin $CANDLEPIN --action distributor_get_manifest --distributor-name sam1       
+	# Downloading manifest (SAM distributor)
+	$python stageportal.py --login samplecustomer01 --password changeme --portal $PORTAL --candlepin $CANDLEPIN --action distributor_get_manifest --distributor-name sam1
 	/tmp/tmpPivvXu.zip
+
+	# Downloading certificate (Satellite5 distributor)
+	$python stageportal.py --login samplecustomer01 --password changeme --portal $PORTAL --candlepin $CANDLEPIN --action satellite_get_certificate --distributor-name sam1
+	/tmp/tmpFkZGdj.xml
 	
 	# Removing distributor
 	$python stageportal.py --login samplecustomer01 --password changeme ---portal $PORTAL --candlepin $CANDLEPIN --action distributor_delete --distributor-name sam1

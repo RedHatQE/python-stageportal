@@ -18,7 +18,9 @@ if __name__ == '__main__':
                     'distributor_add_subscriptions',
                     'distributor_detach_subscriptions',
                     'distributor_delete',
-                    'distributor_get_manifest']
+                    'distributor_get_manifest',
+                    'satellite_create',
+                    'satellite_get_certificate']
     ALL_ACTIONS = ['user_create'] + PWLESS_ACTIONS + DIST_ACTIONS + ['systems_register', 'subscriptions_check', 'heal_org', 'systems_register_classic']
 
     argparser = argparse.ArgumentParser(description='Stage portal tool', epilog='vkuznets@redhat.com')
@@ -48,7 +50,7 @@ if __name__ == '__main__':
             argparser.add_argument('--csv', required=False, help='CSV file with SKUs.')
     if args.action in DIST_ACTIONS:
         argparser.add_argument('--candlepin', required=True, help='The URL to the stage portal\'s Candlepin.')
-        if args.action == 'distributor_create':
+        if args.action in ['distributor_create', 'satellite_create']:
             argparser.add_argument('--distributor-name', required=True, help='Distributor name')
         else:
             argparser.add_argument('--distributor-name', required=False, help='Distributor name')
@@ -138,6 +140,8 @@ if __name__ == '__main__':
         res = None
         if args.action == 'distributor_create':
             res = sp.create_distributor(args.distributor_name)
+        elif args.action == 'satellite_create':
+            res = sp.create_satellite(args.distributor_name)
         else:
             if args.distributor_name is None and args.distributor_uuid is None:
                 sys.stderr.write('You should specify --distributor-name or --distributor-uuid\n')
@@ -165,6 +169,8 @@ if __name__ == '__main__':
             res = sp.delete_distributor(distributor_uuid)
         elif args.action == 'distributor_get_manifest':
             res = sp.distributor_download_manifest(distributor_uuid)
+        elif args.action == 'satellite_get_certificate':
+            res = sp.satellite_download_cert(distributor_uuid)
     elif args.action == 'systems_register':
         res = sp.create_systems(args.csv, args.entitlement_dir, args.org)
         if res is not None:

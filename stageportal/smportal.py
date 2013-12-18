@@ -85,10 +85,17 @@ class SMPortal(BasePortal):
             return None
 
     def create_distributor(self, name, distributor_version='sam-1.3'):
-        """ Create new distributor on portal"""
+        """ Create new SAM distributor on portal"""
         self._retr(self.con.ping, lambda res: res is not None, 1, True, self.portal_login)
         distributor = self._retr(self.con.registerConsumer, lambda res: 'uuid' in res, 1, True, self.portal_login,
                                  name=name, type={'id': '5', 'label': 'sam', 'manifest': True}, facts={'distributor_version': distributor_version})
+        return distributor['uuid']
+
+    def create_satellite(self, name, distributor_version='sat-5.6'):
+        """ Create new Satellite5 distributor on portal"""
+        self._retr(self.con.ping, lambda res: res is not None, 1, True, self.portal_login)
+        distributor = self._retr(self.con.registerConsumer, lambda res: 'uuid' in res, 1, True, self.portal_login,
+                                 name=name, type={'id': '9', 'label': 'satellite', 'manifest': True}, facts={'distributor_version': distributor_version, 'system.certificate_version': '3.0'})
         return distributor['uuid']
 
     def distributor_available_subscriptions(self, uuid):
@@ -168,6 +175,16 @@ class SMPortal(BasePortal):
         req = self._retr(requests.get, lambda res: res.status_code == 200, 1, True, self.portal_login,
                          "https://%s%s/consumers/%s/export" % (self.con.host, self.con.handler, uuid), verify=False, auth=(self.login, self.password))
         tf = tempfile.NamedTemporaryFile(delete=False, suffix=".zip")
+        tf.write(req.content)
+        tf.close()
+        return tf.name
+
+    def satellite_download_cert(self, uuid):
+        """ Download satellite cert """
+        session = self.portal_login()
+        req = self._retr(session.get, lambda res: res.status_code == 200, 1, True, self.portal_login,
+                         self.portal_url + "/management/distributors/%s/certificate/satellite?" % uuid, verify=False, headers={'Accept-Language': 'en-US'})
+        tf = tempfile.NamedTemporaryFile(delete=False, suffix=".xml")
         tf.write(req.content)
         tf.close()
         return tf.name
