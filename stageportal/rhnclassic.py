@@ -6,6 +6,7 @@ import time
 import hashlib
 import xml.etree.ElementTree as ET
 import csv
+from BeautifulSoup import BeautifulSoup
 
 try:
     from rhn import rpclib
@@ -23,12 +24,18 @@ class RhnClassicPortalException(BasePortalException):
 class RhnClassicPortal(BasePortal):
     xmlrpc_url = "http://xmlrpc.example.com/XMLRPC"
 
-    def __init__(self, xmlrpc_url=None, login='admin', password='admin', maxtries=40, insecure=None):
+    def __init__(self, xmlrpc_url=None, login='admin', password='admin', maxtries=40, insecure=None, webui_url=None):
         BasePortal.__init__(self, login, password, maxtries, insecure)
         self.xmlrpc_url = xmlrpc_url
         self.rpc = rpclib.Server(xmlrpc_url)
         self.rpc_api = rpclib.Server(xmlrpc_url.replace('/XMLRPC', '/rpc/api'))
         self.systems = {}
+        self.webui_url = webui_url
+        if webui_url is None:
+            self.webui_url = xmlrpc_url
+            self.webui_url = self.webui_url.replace('/XMLRPC', '')
+            self.webui_url = self.webui_url.replace('http://xmlrpc.', 'http://')
+            self.webui_url = self.webui_url.replace('https://xmlrpc.', 'https://')
 
     def _gen_uuid(self, name, dashed=True):
         md5 = hashlib.md5(self.login + name).hexdigest()
@@ -165,6 +172,71 @@ class RhnClassicPortal(BasePortal):
             raise RhnClassicPortalException("System %s is not in systems list" % system)
         req = self._retr(self.rpc._request, lambda res: res is not None, 1, True, None, 'up2date.listChannels', (self.systems[system]['details'], ))
         return req
+
+    def _webui_login(self):
+        s = requests.session()
+        s.verify = False
+        req = self._retr(s.get, lambda res: res.status_code == 200, 1, True, None, "%s/rhn/" % self.webui_url)
+        bs = BeautifulSoup(req.text)
+        tokens = bs.findAll('input', {'name': 'csrf_token'})
+        if not tokens or tokens == []:
+            raise RhnClassicPortalException('Failed to find CSRF on login page: %s/rhn/' % self.webui_url)
+        csrf = tokens[0].get('value')
+        req = self._retr(s.post, lambda res: res.status_code == 200, 1, True, None, "%s/rhn/ReLoginSubmit.do" % self.webui_url,
+                         data={'csrf_token': csrf,
+                               'username': self.login,
+                               'password': self.password,
+                               'login_cb': 'login',
+                               'url_bounce': '/rhn/',
+                               'request_method': 'GET'})
+        return s
+
+    def get_entitlements_list(self):
+        result = {}
+        s = self._webui_login()
+        req = self._retr(s.get, lambda res: res.status_code == 200, 1, True, None, "%s/rhn/channels/software/Entitlements.do" % self.webui_url)
+        n = 0
+        while True:
+            self.logger.debug("Parsing page No %s with entitlements" % n)
+            n += 1
+            data = {}
+            bs = BeautifulSoup(req.text)
+            headers = []
+            for header in bs.findAll('table', {'class': 'list'})[0].findAll('tr')[0].findAll('th'):
+                # figuring out header names for columns
+                headers.append(header.text)
+            for row in bs.findAll('table', {'class': 'list'})[0].findAll('tr')[1:]:
+                # parsing channel lines
+                td_num = 0
+                result_line = {}
+                for td in row.findAll('td'):
+                    result_line[headers[td_num]] = td.text
+                    td_num += 1
+                if 'Channel Entitlement' in result_line:
+                    result[result_line['Channel Entitlement']] = {}
+                    for key in result_line:
+                        if key != 'Channel Entitlement':
+                            result[result_line['Channel Entitlement']][key] = result_line[key]
+                else:
+                    self.logger.error('Error in parsing line: %s' % result_line)
+
+            for iv in bs.findAll('form', {'action': '/rhn/channels/software/EntitlementsSubmit.do'})[0].findAll('input', {'type':'hidden'}):
+                # csrf and submit
+                data[iv.get('name')] = iv.get('value')
+            for iv in bs.findAll('form', {'action': '/rhn/channels/software/Entitlements.do'})[0].findAll('input', {'type':'hidden'}):
+                # other params
+                data[iv.get('name')] = iv.get('value')
+            have_next = False
+            for key in data:
+                if key[-10:] == '_page_next':
+                    data[key + '.x'] = 1
+                    data[key + '.y'] = 1
+                    have_next = True
+                    break
+            if not have_next:
+                break
+            req = self._retr(s.post, lambda res: res.status_code == 200, 1, True, None, "%s/rhn/channels/software/Entitlements.do" % self.webui_url, data=data)
+        return result
 
     def create_systems(self, csv_file, org=None):
         """
