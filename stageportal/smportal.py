@@ -23,39 +23,11 @@ class SMPortalException(BasePortalException):
 
 class SMPortal(BasePortal):
     candlepin_url = "https://subs.example.com"
-    portal_url = "https://access.example.com"
 
     def __init__(self, api_url=None, candlepin_url=None, portal_url=None, login='admin', password='admin', maxtries=40, insecure=None):
-        BasePortal.__init__(self, login, password, maxtries, insecure, api_url)
+        BasePortal.__init__(self, login, password, maxtries, insecure, api_url, portal_url)
         self.candlepin_url = candlepin_url
-        self.portal_url = portal_url
         self.con = connection.UEPConnection(self.candlepin_url, username=self.login, password=self.password, insecure=insecure)
-
-    def portal_login(self):
-        """ Perform portal login, accept terms if needed """
-        url = self.portal_url
-
-        if url is None:
-            return None
-
-        if url.startswith("https://access."):
-            url = "https://www." + url[15:]
-        url += '/wapps/sso/login.html'
-
-        s = requests.session()
-        s.verify = False
-
-        req1 = self._retr(s.post, lambda res: res.status_code == 200, 1, True, None, url,
-                          data={'_flowId': 'legacy-login-flow', 'failureRedirect': url,
-                                'username': self.login, 'password': self.password},
-                          headers={'Accept-Language': 'en-US'})
-        if req1.content.find('Welcome&nbsp;') == -1:
-            # Accepting terms
-            req_checker = lambda res: res.status_code == 200 and (res.content.find('Open Source Assurance Agreement Acceptance Confirmation') != -1 or res.content.find('Welcome&nbsp;') == -1)
-            req2 = self._retr(s.post, req_checker, 1, True, None, url, params={'_flowId': 'legacy-login-flow', '_flowExecutionKey': 'e1s1'},
-                              data={'accepted': 'true', '_accepted': 'on', 'optionalTerms_28': 'accept', '_eventId_submit': 'Continue', '_flowExecutionKey': 'e1s1', 'redirect': ''})
-        req3 = self._retr(s.get, lambda res: res.status_code == 200, 1, True, None, self.portal_url + "/management/", verify=False, headers={'Accept-Language': 'en-US'})
-        return s
 
     def _get_subscriptions(self):
         self._retr(self.con.ping, lambda res: res is not None, 1, True, self.portal_login)

@@ -15,8 +15,9 @@ class BasePortalException(Exception):
 
 class BasePortal(object):
     api_url = "http://example.com/svcrest"
+    portal_url = "https://access.example.com"
 
-    def __init__(self, login='admin', password='admin', maxtries=40, insecure=None, api_url=None):
+    def __init__(self, login='admin', password='admin', maxtries=40, insecure=None, api_url=None, portal_url=None):
         self.logger = logging.getLogger("python-stageportal")
         self.maxtries = maxtries
         self.insecure = insecure
@@ -24,6 +25,8 @@ class BasePortal(object):
         self.password = password
         if api_url is not None:
             self.api_url = api_url
+        if portal_url is not None:
+            self.portal_url = portal_url
 
     @staticmethod
     def _namify(name, row):
@@ -228,3 +231,29 @@ class BasePortal(object):
                 start_date = datetime.datetime.now().strftime("%Y-%m-%d")
             sku_list.append({'Id': row['Id'], 'Quantity': row['Quantity'], 'Start Date': start_date})
         return self.add_skus(sku_list)
+
+    def portal_login(self):
+        """ Perform portal login, accept terms if needed """
+        url = self.portal_url
+
+        if url is None:
+            return None
+
+        if url.startswith("https://access."):
+            url = "https://www." + url[15:]
+        url += '/wapps/sso/login.html'
+
+        s = requests.session()
+        s.verify = False
+
+        req1 = self._retr(s.post, lambda res: res.status_code == 200, 1, True, None, url,
+                          data={'_flowId': 'legacy-login-flow', 'failureRedirect': url,
+                                'username': self.login, 'password': self.password},
+                          headers={'Accept-Language': 'en-US'})
+        if req1.content.find('Welcome&nbsp;') == -1:
+            # Accepting terms
+            req_checker = lambda res: res.status_code == 200 and (res.content.find('Open Source Assurance Agreement Acceptance Confirmation') != -1 or res.content.find('Welcome&nbsp;') == -1)
+            req2 = self._retr(s.post, req_checker, 1, True, None, url, params={'_flowId': 'legacy-login-flow', '_flowExecutionKey': 'e1s1'},
+                              data={'accepted': 'true', '_accepted': 'on', 'optionalTerms_28': 'accept', '_eventId_submit': 'Continue', '_flowExecutionKey': 'e1s1', 'redirect': ''})
+        req3 = self._retr(s.get, lambda res: res.status_code == 200, 1, True, None, self.portal_url + "/management/", verify=False, headers={'Accept-Language': 'en-US'})
+        return s
