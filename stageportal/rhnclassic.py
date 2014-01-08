@@ -24,8 +24,8 @@ class RhnClassicPortalException(BasePortalException):
 class RhnClassicPortal(BasePortal):
     xmlrpc_url = "http://xmlrpc.example.com/XMLRPC"
 
-    def __init__(self, xmlrpc_url=None, login='admin', password='admin', maxtries=40, insecure=None, webui_url=None):
-        BasePortal.__init__(self, login, password, maxtries, insecure)
+    def __init__(self, xmlrpc_url=None, login='admin', password='admin', maxtries=40, insecure=None, webui_url=None, api_url=None, portal_url=None):
+        BasePortal.__init__(self, login, password, maxtries, insecure, api_url, portal_url)
         self.xmlrpc_url = xmlrpc_url
         self.rpc = rpclib.Server(xmlrpc_url)
         self.rpc_api = rpclib.Server(xmlrpc_url.replace('/XMLRPC', '/rpc/api'))
@@ -191,9 +191,12 @@ class RhnClassicPortal(BasePortal):
                                'request_method': 'GET'})
         return s
 
-    def get_entitlements_list(self):
+    def get_entitlements_list(self, hosted=False):
         result = {}
-        s = self._webui_login()
+        if not hosted:
+            s = self._webui_login()
+        else:
+            s = self.portal_login()
         req = self._retr(s.get, lambda res: res.status_code == 200, 1, True, None, "%s/rhn/channels/software/Entitlements.do" % self.webui_url)
         n = 0
         while True:
@@ -212,27 +215,43 @@ class RhnClassicPortal(BasePortal):
                 for td in row.findAll('td'):
                     result_line[headers[td_num]] = td.text
                     td_num += 1
+                channel_key = None
                 if 'Channel Entitlement' in result_line:
-                    result[result_line['Channel Entitlement']] = {}
-                    for key in result_line:
-                        if key != 'Channel Entitlement':
-                            result[result_line['Channel Entitlement']][key] = result_line[key]
+                    channel_key = 'Channel Entitlement'
+                elif 'Channel Name' in result_line:
+                    channel_key = 'Channel Name'
                 else:
                     self.logger.error('Error in parsing line: %s' % result_line)
 
-            for iv in bs.findAll('form', {'action': '/rhn/channels/software/EntitlementsSubmit.do'})[0].findAll('input', {'type':'hidden'}):
+                if channel_key:
+                    result[result_line[channel_key]] = {}
+                    for key in result_line:
+                        if key != channel_key:
+                            result[result_line[channel_key]][key] = result_line[key]
+
+            submit_form = bs.findAll('form', {'action': '/rhn/channels/software/EntitlementsSubmit.do'})[0]
+            for iv in submit_form.findAll('input', {'type':'hidden'}):
                 # csrf and submit
                 data[iv.get('name')] = iv.get('value')
-            for iv in bs.findAll('form', {'action': '/rhn/channels/software/Entitlements.do'})[0].findAll('input', {'type':'hidden'}):
-                # other params
-                data[iv.get('name')] = iv.get('value')
             have_next = False
-            for key in data:
-                if key[-10:] == '_page_next':
-                    data[key + '.x'] = 1
-                    data[key + '.y'] = 1
+            if not hosted:
+                # Satellite
+                for iv in bs.findAll('form', {'action': '/rhn/channels/software/Entitlements.do'})[0].findAll('input', {'type':'hidden'}):
+                    # other params
+                    data[iv.get('name')] = iv.get('value')
+                for key in data:
+                    if key[-10:] == '_page_next':
+                        data[key + '.x'] = 1
+                        data[key + '.y'] = 1
+                        have_next = True
+                        break
+            else:
+                # RHN Hosted
+                if submit_form.findAll('input', {'name': 'Next'})[0].get('class') == 'list-nextprev-active':
                     have_next = True
-                    break
+                    data['Next.x'] = 1
+                    data['Next.y'] = 1
+                    data['Next'] = '>'
             if not have_next:
                 break
             req = self._retr(s.post, lambda res: res.status_code == 200, 1, True, None, "%s/rhn/channels/software/Entitlements.do" % self.webui_url, data=data)
