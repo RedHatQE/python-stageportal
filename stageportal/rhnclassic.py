@@ -227,7 +227,11 @@ class RhnClassicPortal(BasePortal):
                     result[result_line[channel_key]] = {}
                     for key in result_line:
                         if key != channel_key:
-                            result[result_line[channel_key]][key] = result_line[key]
+                            try:
+                                result[result_line[channel_key]][key] = int(result_line[key])
+                            except ValueError:
+                                self.logger.error('Error in parsing values in line: %s' % result_line)
+                                result[result_line[channel_key]][key] = 0
 
             submit_form = bs.findAll('form', {'action': '/rhn/channels/software/EntitlementsSubmit.do'})[0]
             for iv in submit_form.findAll('input', {'type':'hidden'}):
