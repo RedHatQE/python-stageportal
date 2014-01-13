@@ -205,6 +205,9 @@ class RhnClassicPortal(BasePortal):
             data = {}
             bs = BeautifulSoup(req.text)
             headers = []
+            if bs.findAll('table', {'class': 'list'}) == []:
+                # no channel entitlements
+                break
             for header in bs.findAll('table', {'class': 'list'})[0].findAll('tr')[0].findAll('th'):
                 # figuring out header names for columns
                 headers.append(header.text)
