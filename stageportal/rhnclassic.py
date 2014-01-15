@@ -254,7 +254,9 @@ class RhnClassicPortal(BasePortal):
                         break
             else:
                 # RHN Hosted
-                if submit_form.findAll('input', {'name': 'Next'})[0].get('class') == 'list-nextprev-active':
+                if submit_form.findAll('input', {'name': 'Next'}) == []:
+                    have_next = False
+                elif submit_form.findAll('input', {'name': 'Next'})[0].get('class') == 'list-nextprev-active':
                     have_next = True
                     data['Next.x'] = 1
                     data['Next.y'] = 1
