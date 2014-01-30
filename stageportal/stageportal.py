@@ -1,18 +1,20 @@
+""" Stageportal CLI """
+
 import argparse
 import logging
 import sys
+import pprint
 
-from baseportal import *
 
-
-if __name__ == '__main__':
-    FORMAT = '%(asctime)s %(levelname)s %(message)s'
-    logging.basicConfig(format=FORMAT)
+def main():
+    ''' Main '''
+    lformat = '%(asctime)s %(levelname)s %(message)s'
+    logging.basicConfig(format=lformat)
     logging.getLogger("python-stageportal").setLevel(logging.INFO)
 
-    PWLESS_ACTIONS = ['user_get',
+    pwless_actions = ['user_get',
                       'sku_add']
-    DIST_ACTIONS = ['distributor_create',
+    dist_actions = ['distributor_create',
                     'distributor_available_subscriptions',
                     'distributor_attached_subscriptions',
                     'distributor_add_subscriptions',
@@ -21,16 +23,16 @@ if __name__ == '__main__':
                     'distributor_get_manifest',
                     'satellite_create',
                     'satellite_get_certificate']
-    ALL_ACTIONS = ['user_create'] + PWLESS_ACTIONS + DIST_ACTIONS + ['systems_register', 'subscriptions_check', 'heal_org', 'systems_register_classic']
+    all_actions = ['user_create'] + pwless_actions + dist_actions + ['systems_register', 'subscriptions_check', 'heal_org', 'systems_register_classic']
 
     argparser = argparse.ArgumentParser(description='Stage portal tool', epilog='vkuznets@redhat.com')
 
     argparser.add_argument('--action', required=True,
-                           help='Requested action', choices=ALL_ACTIONS)
+                           help='Requested action', choices=all_actions)
     argparser.add_argument('--login', required=True, help='User login')
     argparser.add_argument('--verbose', default=False, action='store_true', help="Verbose bode")
 
-    [args, ignored_args] = argparser.parse_known_args()
+    [args, _] = argparser.parse_known_args()
 
     if args.verbose:
         logging.getLogger("python-stageportal").setLevel(logging.DEBUG)
@@ -48,7 +50,7 @@ if __name__ == '__main__':
             argparser.add_argument('--sku-quantity', required=False, help='SKU quantity to add')
             argparser.add_argument('--sku-start-date', required=False, help='SKU start date')
             argparser.add_argument('--csv', required=False, help='CSV file with SKUs.')
-    if args.action in DIST_ACTIONS:
+    if args.action in dist_actions:
         argparser.add_argument('--candlepin', required=True, help='The URL to the stage portal\'s Candlepin.')
         if args.action in ['distributor_create', 'satellite_create']:
             argparser.add_argument('--distributor-name', required=True, help='Distributor name')
@@ -79,13 +81,13 @@ if __name__ == '__main__':
         argparser.add_argument('--csv', required=True, help='CSV file with systems definition.')
         argparser.add_argument('--org', required=False, help='Create systems within org (standalone Satellite).')
 
-    if not args.action in PWLESS_ACTIONS:
+    if not args.action in pwless_actions:
         password_required = True
     else:
         password_required = False
     argparser.add_argument('--password', required=password_required, help='User password')
 
-    [args, ignored_args] = argparser.parse_known_args()
+    [args, _] = argparser.parse_known_args()
 
     if args.action == 'distributor_add_subscriptions' and args.all is False and (args.sub_id is None or args.sub_quantity is None):
         sys.stderr.write('You should specify --sub-id and --sub-quantity to attach specified subscription or use --all to attach all available subscriptions\n')
@@ -116,76 +118,79 @@ if __name__ == '__main__':
         xmlrpc = None
 
     if args.action == 'systems_register_classic':
-        from rhnclassic import *
-        sp = RhnClassicPortal(xmlrpc_url=xmlrpc, login=args.login, password=args.password)
+        from rhnclassic import RhnClassicPortal
+        portal = RhnClassicPortal(xmlrpc_url=xmlrpc, login=args.login, password=args.password)
     else:
-        from smportal import *
-        sp = SMPortal(api_url=api, candlepin_url=candlepin, portal_url=portal, login=args.login, password=args.password)
+        from smportal import SMPortal
+        portal = SMPortal(api_url=api, candlepin_url=candlepin, portal_url=portal, login=args.login, password=args.password)
 
     if args.action == 'user_create':
-        res = sp.create_user()
+        res = portal.create_user()
     elif args.action == 'user_get':
-        res = sp.get_user()
+        res = portal.get_user()
     elif args.action == 'sku_add':
         if args.csv is None:
-            res = [sp.hock_sku(args.sku_id, args.sku_quantity, args.sku_start_date)]
+            res = [portal.hock_sku(args.sku_id, args.sku_quantity, args.sku_start_date)]
         else:
-            res = sp.add_skus_csv(args.csv)
+            res = portal.add_skus_csv(args.csv)
         if portal is not None and args.password is not None and not (None in res):
             # Checking if subs appeared in candlepin
-            res_check = sp.check_subscriptions(res)
+            res_check = portal.check_subscriptions(res)
             if res_check is None:
                 res = None
-    elif args.action in DIST_ACTIONS:
+    elif args.action in dist_actions:
         res = None
         if args.action == 'distributor_create':
-            res = sp.create_distributor(args.distributor_name)
+            res = portal.create_distributor(args.distributor_name)
         elif args.action == 'satellite_create':
-            res = sp.create_satellite(args.distributor_name)
+            res = portal.create_satellite(args.distributor_name)
         else:
             if args.distributor_name is None and args.distributor_uuid is None:
                 sys.stderr.write('You should specify --distributor-name or --distributor-uuid\n')
                 sys.exit(1)
             if args.distributor_uuid is None:
-                distributor_uuid = sp.distributor_get_uuid(args.distributor_name)
+                distributor_uuid = portal.distributor_get_uuid(args.distributor_name)
             else:
                 distributor_uuid = args.distributor_uuid
         if res is None and distributor_uuid is None:
             pass
         elif args.action == 'distributor_available_subscriptions':
-            subs = sp.distributor_available_subscriptions(distributor_uuid)
+            subs = portal.distributor_available_subscriptions(distributor_uuid)
             res = pprint.pformat(subs)
         elif args.action == 'distributor_attached_subscriptions':
-            subs = sp.distributor_attached_subscriptions(distributor_uuid)
+            subs = portal.distributor_attached_subscriptions(distributor_uuid)
             res = pprint.pformat(subs)
         elif args.action == 'distributor_add_subscriptions':
             if args.all:
-                res = sp.distributor_attach_everything(distributor_uuid)
+                res = portal.distributor_attach_everything(distributor_uuid)
             else:
-                res = sp.distributor_attach_subscriptions(distributor_uuid, subscriptions=[{'id': args.sub_id, 'quantity': args.sub_quantity}])
+                res = portal.distributor_attach_subscriptions(distributor_uuid, subscriptions=[{'id': args.sub_id, 'quantity': args.sub_quantity}])
         elif args.action == 'distributor_detach_subscriptions':
-            res = sp.distributor_detach_subscriptions(distributor_uuid, subscriptions=args.sub_ids)
+            res = portal.distributor_detach_subscriptions(distributor_uuid, subscriptions=args.sub_ids)
         elif args.action == 'distributor_delete':
-            res = sp.delete_distributor(distributor_uuid)
+            res = portal.delete_distributor(distributor_uuid)
         elif args.action == 'distributor_get_manifest':
-            res = sp.distributor_download_manifest(distributor_uuid)
+            res = portal.distributor_download_manifest(distributor_uuid)
         elif args.action == 'satellite_get_certificate':
-            res = sp.satellite_download_cert(distributor_uuid)
+            res = portal.satellite_download_cert(distributor_uuid)
     elif args.action == 'systems_register':
-        res = sp.create_systems(args.csv, args.entitlement_dir, args.org)
+        res = portal.create_systems(args.csv, args.entitlement_dir, args.org)
         if res is not None:
             res = "<Response [200]>"
     elif args.action == 'systems_register_classic':
-        res = sp.create_systems(args.csv, args.org)
+        res = portal.create_systems(args.csv, args.org)
         if res is not None:
             res = "<Response [200]>"
     elif args.action == 'subscriptions_check':
-        res = sp.check_subscriptions(args.sub_ids)
+        res = portal.check_subscriptions(args.sub_ids)
     elif args.action == 'heal_org':
-        res = sp.heal_entire_org()
+        res = portal.heal_entire_org()
     else:
         sys.stderr.write('Unknown action: %s\n' % args.action)
         sys.exit(1)
     sys.stdout.write('%s\n' % res)
     if res in [[], None]:
         sys.exit(1)
+
+if __name__ == '__main__':
+    main()

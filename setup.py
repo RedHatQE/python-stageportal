@@ -1,3 +1,6 @@
+""" setup.py """
+# pylint: disable=C0301
+
 from distutils.core import setup
 
 setup(

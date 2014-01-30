@@ -1,6 +1,8 @@
 #!/usr/bin/env python
 # -*- encoding: utf-8 -*-
 
+""" BasePortal module """
+
 import logging
 import csv
 import requests
@@ -10,10 +12,12 @@ import datetime
 
 
 class BasePortalException(Exception):
+    """ BasePortalException """
     pass
 
 
 class BasePortal(object):
+    """ BasePortal """
     api_url = "http://example.com/svcrest"
     portal_url = "https://access.example.com"
 
@@ -30,45 +34,48 @@ class BasePortal(object):
 
     @staticmethod
     def _namify(name, row):
+        """ name % row namification """
         try:
             return name % row
         except TypeError:
             return name
 
     def _retr(self, func, check, sleep, blow_up, heal_func, *args, **kwargs):
+        """ retry logic """
         res = None
         ntry = 0
         self.logger.debug("Performing %s with args: %s kwargs %s" % (func, args, kwargs))
         while ntry < self.maxtries:
             exc_message = None
             res = None
+            # pylint: disable=W0703
             try:
                 res = func(*args, **kwargs)
-            except Exception, e:
-                exc_message = "Exception during %s execution: %s" % (func, e)
+            except Exception, err:
+                exc_message = "Exception during %s execution: %s" % (func, err)
                 self.logger.debug(exc_message)
             try:
-                self.logger.debug("Checking %s after %s" % (res, func))
+                self.logger.debug("Checking %s after %s" , res, func)
                 if check(res):
                     self.logger.debug("Checking: passed")
                     break
                 else:
                     self.logger.debug("Checking: failed")
-            except Exception, e:
-                exc_message = "Checking: exception: %s" % e
+            except Exception, err:
+                exc_message = "Checking: exception: %s" % err
                 self.logger.debug(exc_message)
             if heal_func is not None:
-                self.logger.debug("Doing heal func %s" % heal_func)
+                self.logger.debug("Doing heal func %s", heal_func)
                 heal_func()
             ntry += 1
             time.sleep(sleep)
         if ntry >= self.maxtries:
             if res is not None:
-                self.logger.error("%s (args: %s, kwargs %s) failed after %s tries, last result: %s" % (func, args, kwargs, self.maxtries, res))
+                self.logger.error("%s (args: %s, kwargs %s) failed after %s tries, last result: %s", func, args, kwargs, self.maxtries, res)
             elif exc_message is not None:
-                self.logger.error("%s (args: %s, kwargs %s) failed after %s tries, last exception: %s" % (func, args, kwargs, self.maxtries, exc_message))
+                self.logger.error("%s (args: %s, kwargs %s) failed after %s tries, last exception: %s", func, args, kwargs, self.maxtries, exc_message)
             else:
-                self.logger.error("%s (args: %s, kwargs %s) failed after %s tries" % (func, args, kwargs, self.maxtries))
+                self.logger.error("%s (args: %s, kwargs %s) failed after %s tries", func, args, kwargs, self.maxtries)
 
             if blow_up is True:
                 raise BasePortalException("%s failed after %s tries, last result: %s" % (func, self.maxtries, res))
@@ -105,29 +112,31 @@ class BasePortal(object):
                                                 "county": "Wake",
                                                 "countryCode": "US",
                                                 "postalCode": "27606"}}}
-        return self._retr(requests.post, lambda res: int(res.content) is not None, 1, True, None, url, headers={"Content-Type": 'application/json'}, data=json.dumps(newuser)).content
+        return self._retr(requests.post, lambda res: int(res.content) is not None, 1,
+                          True, None, url, headers={"Content-Type": 'application/json'}, data=json.dumps(newuser)).content
 
-    def activate(self, regNumber, start_date):
+    def activate(self, regnumber, start_date):
         """ Activate regNumber """
 
         url = "%s/activation/v2/activate" % self.api_url
 
-        webCustomerId = self.get_user()
-        data = {"activationKey": regNumber,
+        webcustomerid = self.get_user()
+        data = {"activationKey": regnumber,
                 "vendor": "REDHAT",
                 "startDate": start_date,
                 "userName": self.login,
-                "webCustomerId": webCustomerId,
+                "webCustomerId": webcustomerid,
                 "systemName": "genie"
                 }
-        req = self._retr(requests.post, lambda res: res.json()['id'] is not None, 1, True, None, url, headers={"Content-Type": 'application/json'}, data=json.dumps(data))
+        req = self._retr(requests.post, lambda res: res.json()['id'] is not None, 1,
+                         True, None, url, headers={"Content-Type": 'application/json'}, data=json.dumps(data))
         return req.json()['id']
 
-    def hock_sku(self, SKU, quantity, start_date):
+    def hock_sku(self, sku, quantity, start_date):
         """ Place an order """
         url = "%s/regnum/v5/hock/order" % self.api_url
 
-        webCustomerId = self.get_user()
+        webcustomerid = self.get_user()
         data = {"regnumType": "entitlement",
                 "satelliteVersion": "",
                 "login": self.login,
@@ -135,7 +144,7 @@ class BasePortal(object):
                 "sendMail": False,
                 "notifyVendor": False,
                 "header": {"companyName": "",
-                           "customerNumber": webCustomerId,
+                           "customerNumber": webcustomerid,
                            "customerContactName": "Hockeye",
                            "customerContactEmail": "dev-null@redhat.com",
                            "customerRhLoginId": self.login,
@@ -166,13 +175,13 @@ class BasePortal(object):
                                        "group": "staff:pm:hock",
                                        "bccEmails": "dev-null@redhat.com",
                                        "addtEmails": "dev-null@redhat.com"}},
-                "lines": [{"productSKU": SKU,
+                "lines": [{"productSKU": sku,
                            "serviceTagHashed": False,
                            "additionalEmails": [],
                            "ccList": [],
                            "bccList": [],
                            "numSuperRegnums": 1,
-                           "lineItem": {"sku": SKU,
+                           "lineItem": {"sku": sku,
                                         "opUnit": "",
                                         "quantity": quantity,
                                         "zuper": True,
@@ -198,9 +207,10 @@ class BasePortal(object):
                                         "partnerAcctNumber": "",
                                         "replicatorAcctNumber": ""}}]}
 
-        order = self._retr(requests.put, lambda res: 'regNumbers' in res.json(), 1, True, None, url, headers={"Content-Type": 'application/json'}, data=json.dumps(data))
-        regNumber = order.json()['regNumbers'][0][0]['regNumber']
-        return self.activate(regNumber, start_date)
+        order = self._retr(requests.put, lambda res: 'regNumbers' in res.json(), 1,
+                           True, None, url, headers={"Content-Type": 'application/json'}, data=json.dumps(data))
+        regnumber = order.json()['regNumbers'][0][0]['regNumber']
+        return self.activate(regnumber, start_date)
 
     def add_skus(self, skus):
         """
@@ -225,7 +235,7 @@ class BasePortal(object):
             if 'Start Date' in row:
                 try:
                     start_date = (datetime.datetime.now() + datetime.timedelta(int(row['Start Date']))).strftime("%Y-%m-%d")
-                except:
+                except ValueError:
                     start_date = row['Start Date']
             else:
                 start_date = datetime.datetime.now().strftime("%Y-%m-%d")
@@ -243,17 +253,24 @@ class BasePortal(object):
             url = "https://www." + url[15:]
         url += '/wapps/sso/login.html'
 
-        s = requests.session()
-        s.verify = False
+        sess = requests.session()
+        sess.verify = False
 
-        req1 = self._retr(s.post, lambda res: res.status_code == 200, 1, True, None, url,
+        req1 = self._retr(sess.post, lambda res: res.status_code == 200, 1, True, None, url,
                           data={'_flowId': 'legacy-login-flow', 'failureRedirect': url,
                                 'username': self.login, 'password': self.password},
                           headers={'Accept-Language': 'en-US'})
         if req1.content.find('Welcome&nbsp;') == -1:
             # Accepting terms
-            req_checker = lambda res: res.status_code == 200 and (res.content.find('Open Source Assurance Agreement Acceptance Confirmation') != -1 or res.content.find('Welcome&nbsp;') == -1)
-            req2 = self._retr(s.post, req_checker, 1, True, None, url, params={'_flowId': 'legacy-login-flow', '_flowExecutionKey': 'e1s1'},
-                              data={'accepted': 'true', '_accepted': 'on', 'optionalTerms_28': 'accept', '_eventId_submit': 'Continue', '_flowExecutionKey': 'e1s1', 'redirect': ''})
-        req3 = self._retr(s.get, lambda res: res.status_code == 200, 1, True, None, self.portal_url + "/management/", verify=False, headers={'Accept-Language': 'en-US'})
-        return s
+            req_checker = lambda res: res.status_code == 200 and (res.content.find('Open Source Assurance Agreement Acceptance Confirmation') != -1
+                                                                  or res.content.find('Welcome&nbsp;') == -1)
+            self._retr(sess.post, req_checker, 1, True, None, url, params={'_flowId': 'legacy-login-flow', '_flowExecutionKey': 'e1s1'},
+                       data={'accepted': 'true',
+                             '_accepted': 'on',
+                             'optionalTerms_28': 'accept',
+                             '_eventId_submit': 'Continue',
+                             '_flowExecutionKey': 'e1s1',
+                             'redirect': ''})
+        self._retr(sess.get, lambda res: res.status_code == 200, 1, True, None,
+                   self.portal_url + "/management/", verify=False, headers={'Accept-Language': 'en-US'})
+        return sess

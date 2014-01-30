@@ -1,28 +1,28 @@
 #!/usr/bin/env python
 # -*- encoding: utf-8 -*-
 
+""" SubscriptionManagementPortal module """
+
 import requests
 import json
 import re
 import tempfile
 import os
-import sys
 import time
-import pprint
-import logging
 import csv
-import datetime
+import random
 from rhsm import connection
 
-from baseportal import *
+from baseportal import BasePortal, BasePortalException
 
 
 class SMPortalException(BasePortalException):
+    """ SMPortalException """
     pass
 
 
 class SMPortal(BasePortal):
-    candlepin_url = "https://subs.example.com"
+    """ SMPortal """
 
     def __init__(self, api_url=None, candlepin_url=None, portal_url=None, login='admin', password='admin', maxtries=40, insecure=None):
         BasePortal.__init__(self, login, password, maxtries, insecure, api_url, portal_url)
@@ -30,6 +30,7 @@ class SMPortal(BasePortal):
         self.con = connection.UEPConnection(self.candlepin_url, username=self.login, password=self.password, insecure=insecure)
 
     def _get_subscriptions(self):
+        """ Get existing subsctiptions """
         self._retr(self.con.ping, lambda res: res is not None, 1, True, self.portal_login)
         owners = self._retr(self.con.getOwnerList, lambda res: res is not None, 1, True, self.portal_login, self.login)
         self.logger.debug("Owners: %s" % owners)
@@ -43,7 +44,6 @@ class SMPortal(BasePortal):
 
     def check_subscriptions(self, uid_list, external_heal = None):
         """ Check subscription status """
-        ntry = 0
         uid_set = set([str(uid) for uid in uid_list])
         if not external_heal:
             heal = self.portal_login
@@ -67,7 +67,8 @@ class SMPortal(BasePortal):
         """ Create new Satellite5 distributor on portal"""
         self._retr(self.con.ping, lambda res: res is not None, 1, True, self.portal_login)
         distributor = self._retr(self.con.registerConsumer, lambda res: 'uuid' in res, 1, True, self.portal_login,
-                                 name=name, type={'id': '9', 'label': 'satellite', 'manifest': True}, facts={'distributor_version': distributor_version, 'system.certificate_version': '3.0'})
+                                 name=name, type={'id': '9', 'label': 'satellite', 'manifest': True},
+                                 facts={'distributor_version': distributor_version, 'system.certificate_version': '3.0'})
         return distributor['uuid']
 
     def distributor_available_subscriptions(self, uuid):
@@ -94,7 +95,6 @@ class SMPortal(BasePortal):
         """ Get available/attached subscriptions """
         self._retr(self.con.ping, lambda res: res is not None, 1, True, self.portal_login)
         subscriptions = []
-        ntry = 0
         entitlements = self._retr(self.con.getEntitlementList, lambda res: res is not None, 1, True, self.portal_login, consumerId=uuid)
         for entitlement in entitlements:
             serials = []
@@ -119,9 +119,9 @@ class SMPortal(BasePortal):
         if subscriptions is None:
             subscriptions = self.distributor_available_subscriptions(uuid)
         if subscriptions is None or subscriptions == []:
-            raise StagePortalException("Nothing to attach")
+            raise SMPortalException("Nothing to attach")
         for sub in subscriptions:
-            bind = self._retr(self.con.bindByEntitlementPool, lambda res: res is not None, 1, True, self.portal_login, uuid, sub['id'], sub['quantity'])
+            self._retr(self.con.bindByEntitlementPool, lambda res: res is not None, 1, True, self.portal_login, uuid, sub['id'], sub['quantity'])
         return "<Response [200]>"
 
     def distributor_detach_subscriptions(self, uuid, subscriptions=[]):
@@ -136,7 +136,7 @@ class SMPortal(BasePortal):
                 detach_subs.append(sub['id'])
         diff = list(set(subscriptions) - set(detach_subs))
         if len(diff) != 0:
-            raise StagePortalException("Can't detach subs: %s" % diff)
+            raise SMPortalException("Can't detach subs: %s" % diff)
         self.con.ping()
         for serial in detach_serials:
             self._retr(self.con.unbindBySerial, lambda res: True, 1, True, self.portal_login, uuid, serial)
@@ -146,29 +146,29 @@ class SMPortal(BasePortal):
         """ Download manifest """
         req = self._retr(requests.get, lambda res: res.status_code == 200, 1, True, self.portal_login,
                          "https://%s%s/consumers/%s/export" % (self.con.host, self.con.handler, uuid), verify=False, auth=(self.login, self.password))
-        tf = tempfile.NamedTemporaryFile(delete=False, suffix=".zip")
-        tf.write(req.content)
-        tf.close()
-        return tf.name
+        tfile = tempfile.NamedTemporaryFile(delete=False, suffix=".zip")
+        tfile.write(req.content)
+        tfile.close()
+        return tfile.name
 
     def satellite_download_cert(self, uuid):
         """ Download satellite cert """
         session = self.portal_login()
         req = self._retr(session.get, lambda res: res.status_code == 200, 1, True, self.portal_login,
                          self.portal_url + "/management/distributors/%s/certificate/satellite?" % uuid, verify=False, headers={'Accept-Language': 'en-US'})
-        tf = tempfile.NamedTemporaryFile(delete=False, suffix=".xml")
-        tf.write(req.content)
-        tf.close()
-        return tf.name
+        tfile = tempfile.NamedTemporaryFile(delete=False, suffix=".xml")
+        tfile.write(req.content)
+        tfile.close()
+        return tfile.name
 
     def _get_distributor_page(self, name):
         """ Get distributor uuid """
         session = self.portal_login()
         req1 = self._retr(session.get, lambda res: res.status_code == 200, 1, True, self.portal_login,
                           self.portal_url + "/management/distributors", verify=False, headers={'Accept-Language': 'en-US'})
-        m = re.search("/distributors/([0-9,a-f,-]*)\">" + name + "<", req1.content, re.DOTALL)
-        if m is not None:
-            return m.group(1)
+        match = re.search("/distributors/([0-9,a-f,-]*)\">" + name + "<", req1.content, re.DOTALL)
+        if match is not None:
+            return match.group(1)
         else:
             return None
 
@@ -184,6 +184,7 @@ class SMPortal(BasePortal):
         return "<Response [200]>"
 
     def _register_hypervisor(self, org=None, sys_name=None):
+        """ Register hypervisor """
         if sys_name is None:
             sys_name = 'TestHypervisor' + ''.join(random.choice('0123456789ABCDEF') for i in range(6))
 
@@ -192,7 +193,10 @@ class SMPortal(BasePortal):
         self.logger.info("Hypervisor %s created with uid %s" % (sys_name, sys['uuid']))
         return (sys_name, sys['uuid'])
 
-    def _register_system(self, org=None, sys_name=None, cores=1, sockets=1, memory=2, arch='x86_64', dist_name='RHEL', dist_version='6.4', installed_products=[], is_guest=False, virt_uuid='', entitlement_dir=None):
+    def _register_system(self, org=None, sys_name=None, cores=1, sockets=1, memory=2, arch='x86_64',
+                         dist_name='RHEL', dist_version='6.4', installed_products=[], is_guest=False,
+                         virt_uuid='', entitlement_dir=None):
+        """ Register system """
         if sys_name is None:
             sys_name = 'Testsys' + ''.join(random.choice('0123456789ABCDEF') for i in range(6))
 
@@ -216,18 +220,19 @@ class SMPortal(BasePortal):
         self.logger.info("Sys %s created with uid %s" % (sys_name, sys['uuid']))
         if entitlement_dir is not None:
             try:
-                fd = open(entitlement_dir + '/%s.json' % sys_name, 'w')
-                fd.write(json.dumps(sys))
-                fd.close()
+                with open(entitlement_dir + '/%s.json' % sys_name, 'w') as filed:
+                    filed.write(json.dumps(sys))
             except:
                 self.logger.error("Failed to write system data to %s" % entitlement_dir)
 
         return (sys_name, sys['uuid'])
 
-    def _get_suitable_pools(self, pools, productId, is_virtual):
+    @staticmethod
+    def _get_suitable_pools(pools, productid, is_virtual):
+        """ Get suitable pools """
         pool_ids = []
         for pool in pools:
-            if pool['productId'] == productId and (pool['consumed'] < pool['quantity'] or pool['quantity'] == -1):
+            if pool['productId'] == productid and (pool['consumed'] < pool['quantity'] or pool['quantity'] == -1):
                 if is_virtual in [True, 'true', 'True'] and pool['subscriptionSubKey'] != 'master':
                     pool_ids.insert(0, pool['id'])
                 elif pool['subscriptionSubKey'] == 'master':
@@ -237,7 +242,7 @@ class SMPortal(BasePortal):
                     pass
         return pool_ids
 
-    def subscribe_systems(self, systems=None, csv_file=None, entitlement_dir=None, org=None, update=False):
+    def subscribe_systems(self, systems=None, csv_file=None, org=None, update=False):
         """ Subscribe systems """
         self._retr(self.con.ping, lambda res: res is not None, 1, True, self.portal_login)
         if systems is None and csv_file is None:
@@ -345,11 +350,11 @@ class SMPortal(BasePortal):
                     else:
                         self.logger.error('Failed to find appropriate pool for system %s:%s' % (sys['name'], sys['uuid']))
             if update:
-                for ent in self._retr(client_con.getEntitlementList, lambda res: res is not None, 1, True, self.portal_login, sys['uuid']):
+                for ent in self._retr(con_client.getEntitlementList, lambda res: res is not None, 1, True, self.portal_login, sys['uuid']):
                     if not ent['pool']['productId'] in processed_subs:
                         # unbinding everything else
                         serial = ent['certificates'][0]['serial']['serial']
-                        req = self._retr(client_con.unbindBySerial, lambda res: res is not None, 1, True, self.portal_login, sys['uuid'], serial)
+                        req = self._retr(con_client.unbindBySerial, lambda res: res is not None, 1, True, self.portal_login, sys['uuid'], serial)
             if tf_cert is not None:
                 os.unlink(tf_cert.name)
             if tf_key is not None:
@@ -422,7 +427,8 @@ class SMPortal(BasePortal):
                 while ntry < self.maxtries:
                     try:
                         if consumer_type in ['system', 'System']:
-                            (sys_name, sys_uid) = self._register_system(org, name, cores, sockets, memory, arch, dist_name, dist_version, installed_products, is_guest, virt_uuid, entitlement_dir)
+                            (sys_name, sys_uid) = self._register_system(org, name, cores, sockets, memory, arch, dist_name,
+                                                                        dist_version, installed_products, is_guest, virt_uuid, entitlement_dir)
                         elif consumer_type in ['hypervisor', 'Hypervisor']:
                             (sys_name, sys_uid) = self._register_hypervisor(org, name)
                         else:
@@ -453,10 +459,11 @@ class SMPortal(BasePortal):
                 self._retr(self.con.updateConsumer, lambda res: True, 1, True, self.portal_login, host_detail[0], guest_uuids=host_detail[1::])
 
         if subscribe:
-            return self.subscribe_systems(systems=all_systems, csv_file=None, entitlement_dir=entitlement_dir, org=org, update=update)
+            return self.subscribe_systems(systems=all_systems, csv_file=None, org=org, update=update)
         return all_systems
 
     def heal_entire_org(self, owner=None, wait=False, timeout=None):
+        """ Heal Entire Org """
         if owner is None:
             owner_list = self._retr(self.con.getOwnerList, lambda res: res is not None, 1, True, self.portal_login, self.con.username)
             if owner_list is None or owner_list == []:
@@ -467,7 +474,8 @@ class SMPortal(BasePortal):
                     self.logger.info('There are multiple owners available, will heal the first one: %s' % owner_list[0]['key'])
                 owner = owner_list[0]['key']
         url = 'https://%s%s/owners/%s/entitlements' % (self.con.host, self.con.handler, owner)
-        req = self._retr(requests.post, lambda res: res.status_code == 202, 1, True, self.portal_login, url, auth=(self.con.username, self.con.password), verify=False)
+        req = self._retr(requests.post, lambda res: res.status_code == 202, 1, True, self.portal_login, url,
+                         auth=(self.con.username, self.con.password), verify=False)
         if not wait:
             return req
         else:
@@ -475,6 +483,7 @@ class SMPortal(BasePortal):
             return req
 
     def get_pools(self, owner=None):
+        """ Get pools """
         if owner is None:
             owner_list = self._retr(self.con.getOwnerList, lambda res: res is not None, 1, True, self.portal_login, self.con.username)
             if owner_list is None or owner_list == []:
@@ -487,12 +496,15 @@ class SMPortal(BasePortal):
         return self._retr(self.con.getPoolsList, lambda res: res is not None, 1, True, self.portal_login, owner=owner)
 
     def get_entitlements(self, uuid):
+        """ Get entitlements """
         return self._retr(self.con.getEntitlementList, lambda res: res is not None, 1, True, self.portal_login, uuid)
 
     def get_owners(self):
+        """ Get owners """
         return self._retr(self.con.getOwnerList, lambda res: res is not None, 1, True, self.portal_login, self.con.username)
 
     def get_owner_info(self, owner=None):
+        """ Get owner info """
         if owner is None:
             owner_list = self._retr(self.con.getOwnerList, lambda res: res is not None, 1, True, self.portal_login, self.con.username)
             if owner_list is None or owner_list == []:
@@ -505,4 +517,5 @@ class SMPortal(BasePortal):
         return self._retr(self.con.getOwnerInfo, lambda res: res is not None, 1, True, self.portal_login, owner)
 
     def checkin_consumer(self, uuid):
+        """ Checkin consumer """
         return self._retr(self.con.checkin, lambda res: res is not None, 1, True, self.portal_login, uuid)

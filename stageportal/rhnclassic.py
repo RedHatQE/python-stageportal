@@ -1,11 +1,12 @@
 #!/usr/bin/env python
 # -*- encoding: utf-8 -*-
+""" RHNClassicPortal module """
 
-import logging
 import time
 import hashlib
 import xml.etree.ElementTree as ET
 import csv
+import requests
 from BeautifulSoup import BeautifulSoup
 
 try:
@@ -14,15 +15,16 @@ except ImportError:
     # try to avoid dependency
     pass
 
-from baseportal import *
+from baseportal import BasePortal, BasePortalException
 
 
 class RhnClassicPortalException(BasePortalException):
+    """ RhnClassicPortalException """
     pass
 
 
 class RhnClassicPortal(BasePortal):
-    xmlrpc_url = "http://xmlrpc.example.com/XMLRPC"
+    """ RhnClassicPortal """
 
     def __init__(self, xmlrpc_url=None, login='admin', password='admin', maxtries=40, insecure=None, webui_url=None, api_url=None, portal_url=None):
         BasePortal.__init__(self, login, password, maxtries, insecure, api_url, portal_url)
@@ -38,6 +40,7 @@ class RhnClassicPortal(BasePortal):
             self.webui_url = self.webui_url.replace('https://xmlrpc.', 'https://')
 
     def _gen_uuid(self, name, dashed=True):
+        """ Generate UUID """
         md5 = hashlib.md5(self.login + name).hexdigest()
         if dashed:
             return md5[0:8] + '-' + md5[8:12] + '-' + md5[12:16] + '-' + md5[16:20] + '-' + md5[20:]
@@ -46,6 +49,7 @@ class RhnClassicPortal(BasePortal):
 
     @staticmethod
     def _parse_system_details(details):
+        """ Parse system details """
         root = ET.fromstring(details)
         params = {}
         for sub1 in root.findall('param'):
@@ -66,12 +70,16 @@ class RhnClassicPortal(BasePortal):
         return params
 
     def _get_num_id(self, system):
+        """ Get system numeric id """
         return int(self.systems[system]['info']['system_id'].replace('ID-', ''))
 
     def _get_login_token(self):
+        """ Get login token """
         return self._retr(self.rpc_api._request, lambda res: res is not None, 1, True, None, 'auth.login', (self.login, self.password))
 
-    def _register_system(self, sys_name=None, cores=1, memory=2, arch='x86_64', release_name='redhat-release-server', dist_version='6Server', is_guest=False, org_id=None, basechannel=None):
+    def _register_system(self, sys_name=None, cores=1, memory=2, arch='x86_64', release_name='redhat-release-server',
+                         dist_version='6Server', is_guest=False, org_id=None, basechannel=None):
+        """ Register system """
         system = {'username': self.login,
                   'password': self.password,
                   'release_name': release_name,
@@ -103,11 +111,11 @@ class RhnClassicPortal(BasePortal):
                      u'cache': u'8192 KB',
                      u'class': u'CPU',
                      u'desc': u'Processor',
-                     u'model': u'Intel(R) Xeon(R) CPU           W3550  @ 3.07GHz',
+                     u'model': u'Intel(R) Xeon(R)',
                      u'model_number': u'6',
                      u'model_rev': u'5',
                      u'model_ver': u'26',
-                     u'other': u'fpu vme de pse tsc msr pae mce cx8 apic sep mtrr pge mca cmov pat pse36 clflush dts acpi mmx fxsr sse sse2 ss ht tm pbe syscall nx rdtscp lm constant_tsc arch_perfmon pebs bts rep_good xtopology nonstop_tsc aperfmperf pni dtes64 monitor ds_cpl vmx est tm2 ssse3 cx16 xtpr pdcm dca sse4_1 sse4_2 popcnt lahf_lm ida dts tpr_shadow vnmi flexpriority ept vpid',
+                     u'other': u'sse sse2',
                      u'platform': u'x86_64',
                      u'speed': 1595,
                      u'type': u'GenuineIntel'},
@@ -125,30 +133,32 @@ class RhnClassicPortal(BasePortal):
         return details
 
     def _set_virt_host(self, host, guest_ids):
+        """ Set guest/host data """
         if not host in self.systems:
             raise RhnClassicPortalException("Host system %s is not in systems list" % host)
         system = self.systems[host]['details']
-        ut = int(time.time())
-        info = [(ut, 'exists', 'system', {'identity': 'host', 'uuid': '0000000000000000'})]
-        info.append((ut, 'crawl_began', 'system', {}))
+        utime = int(time.time())
+        info = [(utime, 'exists', 'system', {'identity': 'host', 'uuid': '0000000000000000'})]
+        info.append((utime, 'crawl_began', 'system', {}))
         for guest in guest_ids:
             if not guest in self.systems:
                 raise RhnClassicPortalException("Guest system %s is not in systems list" % guest)
 
             guest_info = self.systems[guest]
-            info.append((ut, 'exists', 'domain', {'memory_size': guest_info['memory'],
+            info.append((utime, 'exists', 'domain', {'memory_size': guest_info['memory'],
                                                   'name': guest,
                                                   'state': 'running',
                                                   'uuid': self._gen_uuid(guest, False),
                                                   'vcpus': guest_info['cores'],
                                                   'virt_type': 'fully_virtualized'}))
-        info.append((ut, 'crawl_ended', 'system', {}))
+        info.append((utime, 'crawl_ended', 'system', {}))
         self.logger.debug("Setting hostguest info for %s: %s" % (host, info))
         details = self._retr(self.rpc._request, lambda res: res is not None, 1, True, None, 'registration.virt_notify', (system, info))
         self.logger.debug("Result: %s" % details)
         return details
 
     def _systems_api_call(self, api, system):
+        """ Perform 'system' api call """
         if not system in self.systems:
             raise RhnClassicPortalException("System %s is not in systems list" % system)
         session_id = self._get_login_token()
@@ -156,67 +166,75 @@ class RhnClassicPortal(BasePortal):
         return result
 
     def _list_child_channels(self, system):
+        """ List child channels """
         return self._systems_api_call('listChildChannels', system)
 
     def _get_entitlements(self, system):
+        """ Get system entitlements """
         return self._systems_api_call('getEntitlements', system)
 
     def _add_child_channels(self, system, channels):
+        """ Add child channel """
         if not system in self.systems:
             raise RhnClassicPortalException("System %s is not in systems list" % system)
-        req = self._retr(self.rpc._request, lambda res: res is not None, 1, True, None, 'up2date.subscribeChannels', (self.systems[system]['details'], channels, self.login, self.password))
+        req = self._retr(self.rpc._request, lambda res: res is not None, 1, True, None, 'up2date.subscribeChannels',
+                         (self.systems[system]['details'], channels, self.login, self.password))
         return req
 
     def _list_channels(self, system):
+        """ List system's channels """
         if not system in self.systems:
             raise RhnClassicPortalException("System %s is not in systems list" % system)
-        req = self._retr(self.rpc._request, lambda res: res is not None, 1, True, None, 'up2date.listChannels', (self.systems[system]['details'], ))
+        req = self._retr(self.rpc._request, lambda res: res is not None, 1, True, None, 'up2date.listChannels',
+                         (self.systems[system]['details'], ))
         return req
 
     def _webui_login(self):
-        s = requests.session()
-        s.verify = False
-        req = self._retr(s.get, lambda res: res.status_code == 200, 1, True, None, "%s/rhn/" % self.webui_url)
-        bs = BeautifulSoup(req.text)
-        tokens = bs.findAll('input', {'name': 'csrf_token'})
+        """ Do webui login """
+        sess = requests.session()
+        sess.verify = False
+        req = self._retr(sess.get, lambda res: res.status_code == 200, 1, True, None, "%s/rhn/" % self.webui_url)
+        bsoup = BeautifulSoup(req.text)
+        tokens = bsoup.findAll('input', {'name': 'csrf_token'})
         if not tokens or tokens == []:
             raise RhnClassicPortalException('Failed to find CSRF on login page: %s/rhn/' % self.webui_url)
         csrf = tokens[0].get('value')
-        req = self._retr(s.post, lambda res: res.status_code == 200, 1, True, None, "%s/rhn/ReLoginSubmit.do" % self.webui_url,
+        req = self._retr(sess.post, lambda res: res.status_code == 200, 1, True, None, "%s/rhn/ReLoginSubmit.do" % self.webui_url,
                          data={'csrf_token': csrf,
                                'username': self.login,
                                'password': self.password,
                                'login_cb': 'login',
                                'url_bounce': '/rhn/',
                                'request_method': 'GET'})
-        return s
+        return sess
 
     def get_entitlements_list(self, hosted=False):
+        """ Get all channel entitlements """
         result = {}
         if not hosted:
-            s = self._webui_login()
+            sess = self._webui_login()
         else:
-            s = self.portal_login()
-        req = self._retr(s.get, lambda res: res.status_code == 200, 1, True, None, "%s/rhn/channels/software/Entitlements.do" % self.webui_url)
-        n = 0
+            sess = self.portal_login()
+        req = self._retr(sess.get, lambda res: res.status_code == 200, 1, True, None, "%s/rhn/channels/software/Entitlements.do" % self.webui_url)
+        cnt = 0
         while True:
-            self.logger.debug("Parsing page No %s with entitlements" % n)
-            n += 1
+            self.logger.debug("Parsing page No %s with entitlements" % cnt)
+            cnt += 1
             data = {}
-            bs = BeautifulSoup(req.text)
+            bsoup = BeautifulSoup(req.text)
             headers = []
-            if bs.findAll('table', {'class': 'list'}) == []:
+            if bsoup.findAll('table', {'class': 'list'}) == []:
                 # no channel entitlements
                 break
-            for header in bs.findAll('table', {'class': 'list'})[0].findAll('tr')[0].findAll('th'):
+            for header in bsoup.findAll('table', {'class': 'list'})[0].findAll('tr')[0].findAll('th'):
                 # figuring out header names for columns
                 headers.append(header.text)
-            for row in bs.findAll('table', {'class': 'list'})[0].findAll('tr')[1:]:
+            for row in bsoup.findAll('table', {'class': 'list'})[0].findAll('tr')[1:]:
                 # parsing channel lines
                 td_num = 0
                 result_line = {}
-                for td in row.findAll('td'):
-                    result_line[headers[td_num]] = td.text
+                for td_elem in row.findAll('td'):
+                    result_line[headers[td_num]] = td_elem.text
                     td_num += 1
                 channel_key = None
                 if 'Channel Entitlement' in result_line:
@@ -236,16 +254,16 @@ class RhnClassicPortal(BasePortal):
                                 self.logger.error('Error in parsing values in line: %s' % result_line)
                                 result[result_line[channel_key]][key] = 0
 
-            submit_form = bs.findAll('form', {'action': '/rhn/channels/software/EntitlementsSubmit.do'})[0]
-            for iv in submit_form.findAll('input', {'type':'hidden'}):
+            submit_form = bsoup.findAll('form', {'action': '/rhn/channels/software/EntitlementsSubmit.do'})[0]
+            for inputv in submit_form.findAll('input', {'type':'hidden'}):
                 # csrf and submit
-                data[iv.get('name')] = iv.get('value')
+                data[inputv.get('name')] = inputv.get('value')
             have_next = False
             if not hosted:
                 # Satellite
-                for iv in bs.findAll('form', {'action': '/rhn/channels/software/Entitlements.do'})[0].findAll('input', {'type':'hidden'}):
+                for inputv in bsoup.findAll('form', {'action': '/rhn/channels/software/Entitlements.do'})[0].findAll('input', {'type':'hidden'}):
                     # other params
-                    data[iv.get('name')] = iv.get('value')
+                    data[inputv.get('name')] = inputv.get('value')
                 for key in data:
                     if key[-10:] == '_page_next':
                         data[key + '.x'] = 1
@@ -263,7 +281,8 @@ class RhnClassicPortal(BasePortal):
                     data['Next'] = '>'
             if not have_next:
                 break
-            req = self._retr(s.post, lambda res: res.status_code == 200, 1, True, None, "%s/rhn/channels/software/Entitlements.do" % self.webui_url, data=data)
+            req = self._retr(sess.post, lambda res: res.status_code == 200, 1, True, None,
+                             "%s/rhn/channels/software/Entitlements.do" % self.webui_url, data=data)
         return result
 
     def create_systems(self, csv_file, org=None):
@@ -333,6 +352,7 @@ class RhnClassicPortal(BasePortal):
         return self.systems
 
     def get_rhn_content(self, system, repo, package, verify=False):
+        """ Try fetching content from RHN """
         if not system in self.systems:
             raise RhnClassicPortalException("System %s is not in systems list" % system)
         headers = self._retr(self.rpc._request, lambda res: res is not None, 1, True, None, 'up2date.login', (self.systems[system]['details'], ))
