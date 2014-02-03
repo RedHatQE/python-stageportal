@@ -7,6 +7,7 @@ import hashlib
 import xml.etree.ElementTree as ET
 import csv
 import requests
+import re
 from BeautifulSoup import BeautifulSoup
 
 try:
@@ -208,7 +209,27 @@ class RhnClassicPortal(BasePortal):
                                'request_method': 'GET'})
         return sess
 
-    def get_entitlements_list(self, hosted=False):
+    def _grab_channel_labels(self, sess, href):
+        """ Get channel labels for channel familly """
+        result = []
+        req = self._retr(sess.get, lambda res: res.status_code == 200, 1, True, None, "%s/%s" % (self.webui_url, href))
+        bsoup = BeautifulSoup(req.text)
+        if bsoup.findAll('table', {'class': 'list'}) != []:
+            for row in bsoup.findAll('table', {'class': 'list'})[0].findAll('tr', {'class': re.compile('list-row-even$|list-row-odd$')}):
+                td_elem = row.findAll('td')
+                if td_elem != []:
+                    a_elem = td_elem[0].findAll('a', href=re.compile('.*'))
+                    if a_elem != []:
+                        internal_href = a_elem[0].get('href')
+                        req2 = self._retr(sess.get, lambda res: res.status_code == 200, 1, True, None, "%s/%s" % (self.webui_url, internal_href))
+                        bsoup2 = BeautifulSoup(req2.text)
+                        for tr_elem in bsoup2.findAll('tr'):
+                            if tr_elem.findAll('th', text='Label:') != [] and tr_elem.findAll('td') != []:
+                                result.append(tr_elem.findAll('td')[0].text)
+        return result
+
+
+    def get_entitlements_list(self, hosted=False, get_labels=True):
         """ Get all channel entitlements """
         result = {}
         if not hosted:
@@ -235,6 +256,11 @@ class RhnClassicPortal(BasePortal):
                 result_line = {}
                 for td_elem in row.findAll('td'):
                     result_line[headers[td_num]] = td_elem.text
+                    if get_labels and td_num == 0 and td_elem.findAll('a', href=re.compile('.*')) != []:
+                        self.logger.debug("Getting channel labels, href: %s", td_elem.findAll('a', href=re.compile('.*'))[0].get('href'))
+                        channel_labels = self._grab_channel_labels(sess, td_elem.findAll('a', href=re.compile('.*'))[0].get('href'))
+                        result_line['Channel Labels'] = channel_labels
+                        self.logger.debug("Got channel labels: %s", channel_labels)
                     td_num += 1
                 channel_key = None
                 if 'Channel Entitlement' in result_line:
@@ -249,7 +275,10 @@ class RhnClassicPortal(BasePortal):
                     for key in result_line:
                         if key != channel_key:
                             try:
-                                result[result_line[channel_key]][key] = int(result_line[key])
+                                if key in ['Available Regular', 'Available Flex Guest', 'Consumed Regular', 'Consumed Flex Guest', 'Systems Subscribed']:
+                                    result[result_line[channel_key]][key] = int(result_line[key])
+                                else:
+                                    result[result_line[channel_key]][key] = result_line[key]
                             except ValueError:
                                 self.logger.error('Error in parsing values in line: %s' % result_line)
                                 result[result_line[channel_key]][key] = 0
