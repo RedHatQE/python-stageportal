@@ -375,7 +375,7 @@ class SMPortal(BasePortal):
 
         if org is None:
             org = self._retr(self.con.getOwnerList, lambda res: res is not None and res != [] and 'key' in res[0], 1, True, self.portal_login, self.login)[0]['key']
-            self.logger.debug("Using %s org" % org)
+            self.logger.debug("Using %s owner as org" % org)
 
         data = csv.DictReader(open(csv_file))
         for row in data:
@@ -500,8 +500,9 @@ class SMPortal(BasePortal):
         return self._retr(self.con.getPoolsList, lambda res: res is not None, 1, True, self.portal_login, owner=owner)
 
     def get_entitlements(self, uuid):
-        """ Get entitlements """
-        return self._retr(self.con.getEntitlementList, lambda res: res is not None, 1, True, self.portal_login, uuid)
+        """ Get entitlements (with certs)"""
+        entitlements_list = self._retr(self.con.getEntitlementList, lambda res: res is not None, 1, True, self.portal_login, uuid)
+        return [self._retr(self.con.getEntitlement, lambda res: res is not None, 1, True, self.portal_login, x['id']) for x in entitlements_list]
 
     def get_owners(self):
         """ Get owners """
