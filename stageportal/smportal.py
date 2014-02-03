@@ -373,6 +373,10 @@ class SMPortal(BasePortal):
 
         self._retr(self.con.ping, lambda res: res is not None, 1, True, self.portal_login)
 
+        if org is None:
+            org = self._retr(self.con.getOwnerList, lambda res: res is not None and res != [] and 'key' in res[0], 1, True, self.portal_login, self.login)[0]['key']
+            self.logger.debug("Using %s org" % org)
+
         data = csv.DictReader(open(csv_file))
         for row in data:
             if row['Name'].startswith('#'):
