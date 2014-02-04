@@ -246,6 +246,7 @@ class RhnClassicPortal(BasePortal):
             headers = []
             if bsoup.findAll('table', {'class': 'list'}) == []:
                 # no channel entitlements
+                self.logger.debug("No table with entitlements found on the page: %s" % req.text)
                 break
             for header in bsoup.findAll('table', {'class': 'list'})[0].findAll('tr')[0].findAll('th'):
                 # figuring out header names for columns
@@ -309,6 +310,7 @@ class RhnClassicPortal(BasePortal):
                     data['Next.y'] = 1
                     data['Next'] = '>'
             if not have_next:
+                self.logger.debug("No more pages with entitlements")
                 break
             req = self._retr(sess.post, lambda res: res.status_code == 200, 1, True, None,
                              "%s/rhn/channels/software/Entitlements.do" % self.webui_url, data=data)
