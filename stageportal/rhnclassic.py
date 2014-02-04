@@ -228,15 +228,22 @@ class RhnClassicPortal(BasePortal):
                                 result.append(tr_elem.findAll('td')[0].text)
         return result
 
+    def _get_hosted_entitlements_page(self):
+        """ _get_hosted_entitlements_page service function for Get all channel entitlement """
+        sess = self.portal_login()
+        req = sess.get("%s/rhn/channels/software/Entitlements.do" % self.webui_url)
+        return sess,req
 
     def get_entitlements_list(self, hosted=False, get_labels=False):
         """ Get all channel entitlements """
         result = {}
         if not hosted:
             sess = self._webui_login()
+            req = self._retr(sess.get, lambda res: res.status_code == 200, 1, True, None, "%s/rhn/channels/software/Entitlements.do" % self.webui_url)
         else:
-            sess = self.portal_login()
-        req = self._retr(sess.get, lambda res: res.status_code == 200, 1, True, None, "%s/rhn/channels/software/Entitlements.do" % self.webui_url)
+            (sess, req) = self._retr(self._get_hosted_entitlements_page,
+                                     lambda res: res[1].status_code == 200 and res[1].text.find('Software Channel Entitlements') != -1,
+                                     1, True, None)
         cnt = 0
         while True:
             self.logger.debug("Parsing page No %s with entitlements" % cnt)
