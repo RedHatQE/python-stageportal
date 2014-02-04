@@ -229,7 +229,7 @@ class RhnClassicPortal(BasePortal):
         return result
 
 
-    def get_entitlements_list(self, hosted=False, get_labels=True):
+    def get_entitlements_list(self, hosted=False, get_labels=False):
         """ Get all channel entitlements """
         result = {}
         if not hosted:
