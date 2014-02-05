@@ -23,7 +23,7 @@ def main():
                     'distributor_get_manifest',
                     'satellite_create',
                     'satellite_get_certificate']
-    all_actions = ['user_create'] + pwless_actions + dist_actions + ['systems_register', 'subscriptions_check', 'heal_org', 'systems_register_classic']
+    all_actions = ['user_create'] + pwless_actions + dist_actions + ['systems_register', 'subscriptions_check', 'heal_org', 'systems_register_classic', 'get_rhnclassic_channels']
 
     argparser = argparse.ArgumentParser(description='Stage portal tool', epilog='vkuznets@redhat.com')
 
@@ -80,6 +80,9 @@ def main():
         argparser.add_argument('--xmlrpc', required=True, help='XMLRPC URL')
         argparser.add_argument('--csv', required=True, help='CSV file with systems definition.')
         argparser.add_argument('--org', required=False, help='Create systems within org (standalone Satellite).')
+    if args.action == 'get_rhnclassic_channels':
+        argparser.add_argument('--xmlrpc', required=True, help='XMLRPC URL')
+        argparser.add_argument('--with-labels', default=False, action='store_true', help="Include channel labels (slow)")
 
     if not args.action in pwless_actions:
         password_required = True
@@ -117,9 +120,9 @@ def main():
     else:
         xmlrpc = None
 
-    if args.action == 'systems_register_classic':
+    if args.action in ['systems_register_classic', 'get_rhnclassic_channels']:
         from rhnclassic import RhnClassicPortal
-        portal = RhnClassicPortal(xmlrpc_url=xmlrpc, login=args.login, password=args.password)
+        portal = RhnClassicPortal(xmlrpc_url=xmlrpc, portal_url=portal, login=args.login, password=args.password)
     else:
         from smportal import SMPortal
         portal = SMPortal(api_url=api, candlepin_url=candlepin, portal_url=portal, login=args.login, password=args.password)
@@ -181,6 +184,9 @@ def main():
         res = portal.create_systems(args.csv, args.org)
         if res is not None:
             res = "<Response [200]>"
+    elif args.action == 'get_rhnclassic_channels':
+        res = portal.get_entitlements_list(hosted=True, get_labels=args.with_labels)
+        res = pprint.pformat(res)
     elif args.action == 'subscriptions_check':
         res = portal.check_subscriptions(args.sub_ids)
     elif args.action == 'heal_org':
