@@ -146,11 +146,13 @@ class RhnClassicPortal(BasePortal):
                 raise RhnClassicPortalException("Guest system %s is not in systems list" % guest)
 
             guest_info = self.systems[guest]
-            info.append((utime, 'exists', 'domain', {'memory_size': guest_info['memory'],
+            memory = guest_info.get('memory', 0)
+            cores = guest_info.get('cores', 1)
+            info.append((utime, 'exists', 'domain', {'memory_size': memory,
                                                   'name': guest,
                                                   'state': 'running',
                                                   'uuid': self._gen_uuid(guest, False),
-                                                  'vcpus': guest_info['cores'],
+                                                  'vcpus': cores,
                                                   'virt_type': 'fully_virtualized'}))
         info.append((utime, 'crawl_ended', 'system', {}))
         self.logger.debug("Setting hostguest info for %s: %s" % (host, info))
