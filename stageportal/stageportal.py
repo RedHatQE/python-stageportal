@@ -31,6 +31,7 @@ def main():
                            help='Requested action', choices=all_actions)
     argparser.add_argument('--login', required=True, help='User login')
     argparser.add_argument('--verbose', default=False, action='store_true', help="Verbose bode")
+    argparser.add_argument('--maxtries', type=int, default=20, help="Maximum retries count")
 
     [args, _] = argparser.parse_known_args()
 
@@ -122,10 +123,10 @@ def main():
 
     if args.action in ['systems_register_classic', 'get_rhnclassic_channels']:
         from rhnclassic import RhnClassicPortal
-        portal = RhnClassicPortal(xmlrpc_url=xmlrpc, portal_url=portal, login=args.login, password=args.password)
+        portal = RhnClassicPortal(xmlrpc_url=xmlrpc, portal_url=portal, login=args.login, password=args.password, maxtries=args.maxtries)
     else:
         from smportal import SMPortal
-        portal = SMPortal(api_url=api, candlepin_url=candlepin, portal_url=portal, login=args.login, password=args.password)
+        portal = SMPortal(api_url=api, candlepin_url=candlepin, portal_url=portal, login=args.login, password=args.password, maxtries=args.maxtries)
 
     if args.action == 'user_create':
         res = portal.create_user()
