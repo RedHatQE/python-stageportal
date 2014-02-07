@@ -72,6 +72,8 @@ class BasePortal(object):
         if ntry >= self.maxtries:
             if res is not None:
                 self.logger.error("%s (args: %s, kwargs %s) failed after %s tries, last result: %s", func, args, kwargs, self.maxtries, res)
+                if type(res) == requests.models.Response:
+                    self.logger.debug("Request output: %s", res.text)
             elif exc_message is not None:
                 self.logger.error("%s (args: %s, kwargs %s) failed after %s tries, last exception: %s", func, args, kwargs, self.maxtries, exc_message)
             else:
