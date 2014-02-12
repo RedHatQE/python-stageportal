@@ -161,22 +161,6 @@ class SMPortal(BasePortal):
         tfile.close()
         return tfile.name
 
-    def _get_distributor_page(self, name):
-        """ Get distributor uuid """
-        session = self.portal_login()
-        req1 = self._retr(session.get, lambda res: res.status_code == 200, 1, True, self.portal_login,
-                          self.portal_url + "/management/distributors", verify=False, headers={'Accept-Language': 'en-US'})
-        match = re.search("/distributors/([0-9,a-f,-]*)\">" + name + "<", req1.content, re.DOTALL)
-        if match is not None:
-            return match.group(1)
-        else:
-            return None
-
-    def distributor_get_uuid(self, name):
-        """ Get distributor uuid """
-        uuid = self._retr(self._get_distributor_page, lambda res: res is not None, 1, True, None, name)
-        return uuid
-
     def delete_distributor(self, uuid):
         """ Delete distributor """
         self._retr(self.con.ping, lambda res: res is not None, 1, True, self.portal_login)

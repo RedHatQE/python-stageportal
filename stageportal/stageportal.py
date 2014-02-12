@@ -56,8 +56,7 @@ def main():
         if args.action in ['distributor_create', 'satellite_create']:
             argparser.add_argument('--distributor-name', required=True, help='Distributor name')
         else:
-            argparser.add_argument('--distributor-name', required=False, help='Distributor name')
-            argparser.add_argument('--distributor-uuid', required=False, help='Distributor uuid')
+            argparser.add_argument('--distributor-uuid', required=True, help='Distributor uuid')
 
         if args.action == 'distributor_add_subscriptions':
             argparser.add_argument('--all', required=False, action='store_true', default=False, help='attach all available subscriptions')
@@ -149,13 +148,7 @@ def main():
         elif args.action == 'satellite_create':
             res = portal.create_satellite(args.distributor_name)
         else:
-            if args.distributor_name is None and args.distributor_uuid is None:
-                sys.stderr.write('You should specify --distributor-name or --distributor-uuid\n')
-                sys.exit(1)
-            if args.distributor_uuid is None:
-                distributor_uuid = portal.distributor_get_uuid(args.distributor_name)
-            else:
-                distributor_uuid = args.distributor_uuid
+            distributor_uuid = args.distributor_uuid
         if res is None and distributor_uuid is None:
             pass
         elif args.action == 'distributor_available_subscriptions':

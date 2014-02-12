@@ -25,11 +25,11 @@ CLI usage example
 	c2f87b08-69da-4ed4-9995-b7c5b225d453
 
 	# Creating Satellite5 (Spacewalk) distributor
-	$python stageportal.py --login samplecustomer01 --password changeme --portal $PORTAL --candlepin $CANDLEPIN --action satellite_create --distributor-name sam1
+	$python stageportal.py --login samplecustomer01 --password changeme --portal $PORTAL --candlepin $CANDLEPIN --action satellite_create --distributor-name sat1
 	2947b137-f29a-4b9d-938a-03e01ca76f1f
 	
 	# Listing subscriptions available for attaching to distributor
-	$python stageportal.py --login samplecustomer01 --password changeme --candlepin $CANDLEPIN --portal $PORTAL --action distributor_available_subscriptions --distributor-name sam1
+	$python stageportal.py --login samplecustomer01 --password changeme --candlepin $CANDLEPIN --portal $PORTAL --action distributor_available_subscriptions --distributor-uuid c2f87b08-69da-4ed4-9995-b7c5b225d453
 	 [{'date_end': u'07/04/2014',
            'date_start': u'07/04/2013',
            'id': '8a99f9833fcdf2d0013ff1630d9255c3',
@@ -37,36 +37,36 @@ CLI usage example
            'quantity': '40'}]
 
 	# Attaching subscription to distributor
-	$python stageportal.py --login samplecustomer01 --password changeme --candlepin $CANDLEPIN --portal $PORTAL --action distributor_add_subscriptions --distributor-name sam1 --sub-id 8a99f9833fcdf2d0013ff1630d9255c3 --sub-quantity 10
+	$python stageportal.py --login samplecustomer01 --password changeme --candlepin $CANDLEPIN --portal $PORTAL --action distributor_add_subscriptions --distributor-uuid c2f87b08-69da-4ed4-9995-b7c5b225d453 --sub-id 8a99f9833fcdf2d0013ff1630d9255c3 --sub-quantity 10
 	<Response [200]>
 
 	OR
 
 	# Attaching all available subscriptions to distributor
-	$python stageportal.py --login samplecustomer01 --password changeme --candlepin $CANDLEPIN --portal $PORTAL --action distributor_add_subscriptions --distributor-name sam1 --all
+	$python stageportal.py --login samplecustomer01 --password changeme --candlepin $CANDLEPIN --portal $PORTAL --action distributor_add_subscriptions --distributor-uuid c2f87b08-69da-4ed4-9995-b7c5b225d453 --all
 	<Response [200]>
 
 	# Listing subscriptions already attached to distributor
-	$python stageportal.py --login samplecustomer01 --password changeme --candlepin $CANDLEPIN --portal $PORTAL --action distributor_attached_subscriptions --distributor-name sam1
+	$python stageportal.py --login samplecustomer01 --password changeme --candlepin $CANDLEPIN --portal $PORTAL --action distributor_attached_subscriptions --distributor-uuid c2f87b08-69da-4ed4-9995-b7c5b225d453
 	[{'date_end': u'07/26/2014',
           'id': '8a99f98340a67e350140bf6d81d17064',
           'name': u'Red Hat Directory Server (Replica)',
           'quantity': u'6'}]
 
 	# Detaching subscriptions from distributor
-	$python stageportal.py --login samplecustomer01 --password changeme --candlepin $CANDLEPIN --portal $PORTAL --action distributor_detach_subscriptions --distributor-name sam1 --sub-ids 8a99f98340a67e350140bf6d92e77066
+	$python stageportal.py --login samplecustomer01 --password changeme --candlepin $CANDLEPIN --portal $PORTAL --action distributor_detach_subscriptions --distributor-uuid c2f87b08-69da-4ed4-9995-b7c5b225d453 --sub-ids 8a99f98340a67e350140bf6d92e77066
 	<Response [200]>
 
 	# Downloading manifest (SAM distributor)
-	$python stageportal.py --login samplecustomer01 --password changeme --portal $PORTAL --candlepin $CANDLEPIN --action distributor_get_manifest --distributor-name sam1
+	$python stageportal.py --login samplecustomer01 --password changeme --portal $PORTAL --candlepin $CANDLEPIN --action distributor_get_manifest --distributor-uuid c2f87b08-69da-4ed4-9995-b7c5b225d453
 	/tmp/tmpPivvXu.zip
 
 	# Downloading certificate (Satellite5 distributor)
-	$python stageportal.py --login samplecustomer01 --password changeme --portal $PORTAL --candlepin $CANDLEPIN --action satellite_get_certificate --distributor-name sam1
+	$python stageportal.py --login samplecustomer01 --password changeme --portal $PORTAL --candlepin $CANDLEPIN --action satellite_get_certificate --distributor-uuid c2f87b08-69da-4ed4-9995-b7c5b225d453
 	/tmp/tmpFkZGdj.xml
 	
 	# Removing distributor
-	$python stageportal.py --login samplecustomer01 --password changeme ---portal $PORTAL --candlepin $CANDLEPIN --action distributor_delete --distributor-name sam1
+	$python stageportal.py --login samplecustomer01 --password changeme ---portal $PORTAL --candlepin $CANDLEPIN --action distributor_delete --distributor-uuid c2f87b08-69da-4ed4-9995-b7c5b225d453
 	<Response [200]>
 
 	# Registering systems
