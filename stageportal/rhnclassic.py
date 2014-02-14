@@ -285,7 +285,15 @@ class RhnClassicPortal(BasePortal):
                     for key in result_line:
                         if key != channel_key:
                             try:
-                                if key in ['Available Regular', 'Available Flex Guest', 'Consumed Regular', 'Consumed Flex Guest', 'Systems Subscribed']:
+                                if key in ['Available Regular',
+                                           'Regular Available',
+                                           'Available Flex Guest',
+                                           'Available Flex Guests',
+                                           'Consumed Regular',
+                                           'Regular Consumed',
+                                           'Consumed Flex Guest',
+                                           'Consumed Flex Guests',
+                                           'Systems Subscribed']:
                                     result[result_line[channel_key]][key] = int(result_line[key])
                                 else:
                                     result[result_line[channel_key]][key] = result_line[key]
