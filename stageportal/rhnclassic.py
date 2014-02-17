@@ -294,7 +294,10 @@ class RhnClassicPortal(BasePortal):
                                            'Consumed Flex Guest',
                                            'Consumed Flex Guests',
                                            'Systems Subscribed']:
-                                    result[result_line[channel_key]][key] = int(result_line[key])
+                                    if result_line[key] == 'Unlimited':
+                                        result[result_line[channel_key]][key] = -1
+                                    else:
+                                        result[result_line[channel_key]][key] = int(result_line[key])
                                 else:
                                     result[result_line[channel_key]][key] = result_line[key]
                             except ValueError:
