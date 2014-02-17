@@ -399,9 +399,24 @@ class RhnClassicPortal(BasePortal):
 
         return self.systems
 
-    def get_rhn_content(self, system, repo, package, verify=False):
+    def system_login(self, system):
+        """ Do up2date.login for system """
+        if not system in self.systems:
+            raise RhnClassicPortalException("System %s is not in systems list" % system)
+        headers = self._retr(self.rpc._request, lambda res: res is not None, 1, False, None, 'up2date.login', (self.systems[system]['details'], ))
+        if headers is not None:
+            self.systems[system]['login_headers'] = headers.copy()
+        return headers
+
+    def get_rhn_content(self, system, repo, package, verify=False, login=True):
         """ Try fetching content from RHN """
         if not system in self.systems:
             raise RhnClassicPortalException("System %s is not in systems list" % system)
-        headers = self._retr(self.rpc._request, lambda res: res is not None, 1, True, None, 'up2date.login', (self.systems[system]['details'], ))
-        return requests.get("%s/GET-REQ/%s/getPackage/%s" % (self.xmlrpc_url, repo, package), headers=headers, verify=verify)
+        if login or not 'login_headers' in self.systems[system]:
+            if not login:
+                self.logger.debug("Performing login for %s as there is no login headers in system data", system)
+            else:
+                self.logger.debug("Performing login for %s as requested", system)
+            assert self.system_login(system) is not None, "Failed to perform up2date.login"
+        return requests.get("%s/GET-REQ/%s/getPackage/%s" % (self.xmlrpc_url, repo, package),
+                            headers=self.systems[system]['login_headers'], verify=verify)
