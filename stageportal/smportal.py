@@ -79,14 +79,19 @@ class SMPortal(BasePortal):
         for own in owners:
             pools = self._retr(self.con.getPoolsList, lambda res: res is not None, 1, True, self.portal_login, owner=own['key'])
             for pool in pools:
-                count = pool['quantity'] - pool['consumed']
                 if 'subscriptionSubKey' in pool and pool['subscriptionSubKey'] == 'derived':
                     # skip derived pools
                     continue
-                if count > 0:
+                if pool['quantity'] >= 0:
+                    count = pool['quantity'] - pool['consumed']
+                else:
+                    # unlimited pool
+                    count = pool['quantity']
+                if count != 0:
                     subscriptions.append({'id': pool['id'],
                                           'name': pool['productName'],
                                           'quantity': count,
+                                          'subscriptionId': pool['subscriptionId'],
                                           'date_start': pool['startDate'],
                                           'date_end': pool['endDate']})
         return subscriptions
