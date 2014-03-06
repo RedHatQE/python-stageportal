@@ -123,6 +123,10 @@ class SMPortal(BasePortal):
         self._retr(self.con.ping, lambda res: res is not None, 1, True, self.portal_login)
         if subscriptions is None:
             subscriptions = self.distributor_available_subscriptions(uuid)
+            for sub in subscriptions:
+                if sub['quantity'] < 0:
+                    # unlimited pool, add 64
+                    sub['quantity'] = 64
         if subscriptions is None or subscriptions == []:
             raise SMPortalException("Nothing to attach")
         for sub in subscriptions:
