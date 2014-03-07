@@ -92,6 +92,7 @@ class SMPortal(BasePortal):
                                           'name': pool['productName'],
                                           'quantity': count,
                                           'subscriptionId': pool['subscriptionId'],
+                                          'productId': pool['productId'],
                                           'date_start': pool['startDate'],
                                           'date_end': pool['endDate']})
         return subscriptions
