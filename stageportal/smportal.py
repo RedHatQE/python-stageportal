@@ -164,11 +164,8 @@ class SMPortal(BasePortal):
     def satellite_download_cert(self, uuid):
         """ Download satellite cert """
         session = self.portal_login()
-        req = self._retr(session.get, lambda res: res.status_code == 200, 1, True, self.portal_login,
+        req = self._retr(session.get, lambda res: res.status_code == 200 and res.headers['content-type'] == 'application/octet-stream', 10, True, self.portal_login,
                          self.portal_url + "/management/distributors/%s/certificate/satellite?" % uuid, verify=False, headers={'Accept-Language': 'en-US'})
-        if req.headers['content-type'] != 'application/octet-stream':
-            self.logger.debug("Returned: %s", req.content)
-            raise SMPortalException("Can't download Satellite certificate!")
         tfile = tempfile.NamedTemporaryFile(delete=False, suffix=".xml")
         tfile.write(req.content)
         tfile.close()
