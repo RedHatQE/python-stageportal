@@ -23,7 +23,15 @@ def main():
                     'distributor_get_manifest',
                     'satellite_create',
                     'satellite_get_certificate']
-    all_actions = ['user_create'] + pwless_actions + dist_actions + ['systems_register', 'subscriptions_check', 'heal_org', 'systems_register_classic', 'get_rhnclassic_channels']
+    other_actions = ['user_create',
+                     'systems_register',
+                     'subscriptions_check',
+                     'heal_org',
+                     'systems_register_classic',
+                     'get_rhnclassic_channels',
+                     'get_cdn_content']
+
+    all_actions = pwless_actions + dist_actions + other_actions
 
     argparser = argparse.ArgumentParser(description='Stage portal tool', epilog='vkuznets@redhat.com')
 
@@ -83,6 +91,11 @@ def main():
     if args.action == 'get_rhnclassic_channels':
         argparser.add_argument('--xmlrpc', required=True, help='XMLRPC URL')
         argparser.add_argument('--with-labels', default=False, action='store_true', help="Include channel labels (slow)")
+    if args.action == 'get_cdn_content':
+        argparser.add_argument('--candlepin', required=True, help='The URL to the stage portal\'s Candlepin.')
+        argparser.add_argument('--url', required=True, help='CDN url')
+        argparser.add_argument('--uuid', required=True, help='Consumer UUID')
+        argparser.add_argument('--save', required=False, help='Save file to specified location')
 
     if not args.action in pwless_actions:
         password_required = True
@@ -185,6 +198,13 @@ def main():
         res = portal.check_subscriptions(args.sub_ids)
     elif args.action == 'heal_org':
         res = portal.heal_entire_org()
+    elif args.action == 'get_cdn_content':
+        res = portal.cdn_get_file(args.uuid, args.url)
+        if res is not None and res.status_code == 200 and args.save is not None:
+            fname = args.save + '/' + args.url.split('/')[-1]
+            with open(fname, 'w') as fd:
+                fd.write(res.content)
+                sys.stdout.write('%s downloaded\n' % fname)
     else:
         sys.stderr.write('Unknown action: %s\n' % args.action)
         sys.exit(1)
