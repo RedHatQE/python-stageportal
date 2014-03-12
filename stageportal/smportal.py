@@ -11,6 +11,7 @@ import os
 import time
 import csv
 import random
+import inspect
 from rhsm import connection
 
 from baseportal import BasePortal, BasePortalException
@@ -518,3 +519,58 @@ class SMPortal(BasePortal):
     def checkin_consumer(self, uuid):
         """ Checkin consumer """
         return self._retr(self.con.checkin, lambda res: res is not None, 1, True, self.portal_login, uuid)
+
+    def establish_client_con(self, uuid):
+        """ Connect with client cert """
+        self.logger.debug("Trying to connect as %s", uuid)
+        data = self._retr(self.con.getConsumer, lambda res: res is not None, 1, True, self.portal_login, uuid)
+        tf_cert = tempfile.NamedTemporaryFile(delete=False, suffix=".pem")
+        tf_cert.write(data['idCert']['cert'])
+        tf_cert.close()
+        tf_key = tempfile.NamedTemporaryFile(delete=False, suffix=".pem")
+        tf_key.write(data['idCert']['key'])
+        tf_key.close()
+        con_client = connection.UEPConnection(self.candlepin_url, insecure=self.insecure, cert_file=tf_cert.name, key_file=tf_key.name)
+        self.logger.debug("Created client connection for %s", uuid)
+        return con_client
+
+    def get_client_compliance(self, uuid):
+        """ Get client compliance status """
+        self.logger.debug("Getting compliance status for %s", uuid)
+        con_client = self.establish_client_con(uuid)
+        assert con_client is not None
+        ret = self._retr(con_client.getCompliance, lambda res: res is not None, 1, True, self.portal_login, uuid)
+        os.unlink(con_client.cert_file)
+        os.unlink(con_client.key_file)
+        return ret
+
+    def cdn_get_file(self, uuid, url, verify=False):
+        """ Try accessing content on CDN """
+        self.logger.debug("Checking content access, uuid: %s, url: %s", uuid, url)
+        con_client = self.establish_client_con(uuid)
+        assert con_client is not None
+        if 'request_certs' in inspect.getargspec(self.con.getEntitlementList)[0]:
+            entitlements = self._retr(con_client.getEntitlementList, lambda res: res is not None, 1, True, self.portal_login, uuid, request_certs=True)
+        else:
+            entitlements = self._retr(con_client.getEntitlementList, lambda res: res is not None, 1, True, self.portal_login, uuid)
+        req = None
+        for entitlement in entitlements:
+            # Try all entitlements available
+            if 'cert' in entitlement['certificates'][0]:
+                entitlement_data = entitlement
+            else:
+                entitlement_data = self._retr(con_client.getEntitlement, lambda res: res is not None, 1, True, self.portal_login, entitlement['id'])
+            tcert = tempfile.NamedTemporaryFile(delete=False)
+            tkey = tempfile.NamedTemporaryFile(delete=False)
+            tcert.write(entitlement_data['certificates'][0]['cert'])
+            tkey.write(entitlement_data['certificates'][0]['key'])
+            tcert.close()
+            tkey.close()
+            req = self._retr(requests.get, lambda res: res is not None, 1, True, None, url, verify=verify, cert=(tcert.name, tkey.name))
+            os.unlink(tcert.name)
+            os.unlink(tkey.name)
+            if req.status_code == 200:
+                break
+        os.unlink(con_client.cert_file)
+        os.unlink(con_client.key_file)
+        return req
