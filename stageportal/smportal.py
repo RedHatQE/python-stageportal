@@ -172,14 +172,21 @@ class SMPortal(BasePortal):
         tfile.close()
         return tfile.name
 
+    def unregister_consumer(self, uuid):
+        """ Unregister consumer """
+        self._retr(self.con.ping, lambda res: res is not None, 1, True, self.portal_login)
+        return self._retr(self.con.unregisterConsumer, lambda res: True, 1, True, self.portal_login, uuid)
+
     def delete_distributor(self, uuid):
         """ Delete distributor """
-        self._retr(self.con.ping, lambda res: res is not None, 1, True, self.portal_login)
-        self._retr(self.con.unregisterConsumer, lambda res: True, 1, True, self.portal_login, uuid)
+        self.unregister_consumer(uuid)
         return "<Response [200]>"
 
     def register_hypervisor(self, org=None, sys_name=None):
         """ Register hypervisor """
+        if org is None:
+            org = self._get_owner_key()
+
         if sys_name is None:
             sys_name = 'TestHypervisor' + ''.join(random.choice('0123456789ABCDEF') for i in range(6))
 
@@ -192,6 +199,9 @@ class SMPortal(BasePortal):
                          dist_name='RHEL', dist_version='6.4', installed_products=[], is_guest=False,
                          virt_uuid='', entitlement_dir=None):
         """ Register system """
+        if org is None:
+            org = self._get_owner_key()
+
         if sys_name is None:
             sys_name = 'Testsys' + ''.join(random.choice('0123456789ABCDEF') for i in range(6))
 
@@ -237,6 +247,17 @@ class SMPortal(BasePortal):
                     pass
         return pool_ids
 
+    def subscribe_system(self, uuid, pool_id=None, blow_up=True):
+        """ Subscribe system to a given pool or select it automatically """
+        con_client = self.establish_client_con(uuid)
+        assert con_client is not None
+        if pool_id is None:
+            entitlements = self._retr(con_client.bind, lambda res: res is not None, 1, blow_up, self.portal_login, uuid)
+        else:
+            entitlements = self._retr(con_client.bindByEntitlementPool, lambda res: res is not None, 1, blow_up, self.portal_login, uuid, pool_id)
+        self.logger.debug("Got %s after binding" % entitlements)
+        return entitlements
+
     def subscribe_systems(self, systems=None, csv_file=None, org=None, update=False):
         """ Subscribe systems """
         self._retr(self.con.ping, lambda res: res is not None, 1, True, self.portal_login)
@@ -264,10 +285,10 @@ class SMPortal(BasePortal):
                     all_systems.insert(0, consumer)
 
         if org is None:
-            owners = self._retr(self.con.getOwnerList, lambda res: res is not None, 1, True, self.portal_login, self.login)
-            self.logger.debug("Owners: %s" % owners)
+            owners = [self._get_owner_key()]
         else:
             owners = [org]
+        self.logger.debug("Owners: %s" % owners)
 
         ext_subs = {}
 
@@ -288,12 +309,9 @@ class SMPortal(BasePortal):
 
         for sys in all_systems:
             pools = []
-            if org is None:
-                for own in owners:
-                    own_pools = self._retr(self.con.getPoolsList, lambda res: res is not None, 1, True, self.portal_login, sys['uuid'], owner=own['key'])
-                    pools += own_pools
-            else:
-                pools = self._retr(self.con.getPoolsList, lambda res: res is not None, 1, True, self.portal_login, sys['uuid'], owner=org)
+            for own in owners:
+                own_pools = self._retr(self.con.getPoolsList, lambda res: res is not None, 1, True, self.portal_login, sys['uuid'], owner=own)
+                pools += own_pools
 
             existing_subs = []
             if update:
@@ -313,18 +331,9 @@ class SMPortal(BasePortal):
 
             if org is not None:
                 # we need to bind as customer
-                idcert = self._retr(self.con.getConsumer, lambda res: res is not None, 1, True, self.portal_login, sys['uuid'])
-                tf_cert = tempfile.NamedTemporaryFile(delete=False, suffix=".pem")
-                tf_cert.write(idcert['idCert']['cert'])
-                tf_cert.close()
-                tf_key = tempfile.NamedTemporaryFile(delete=False, suffix=".pem")
-                tf_key.write(idcert['idCert']['key'])
-                tf_key.close()
-                con_client = connection.UEPConnection(self.candlepin_url, insecure=self.insecure, cert_file=tf_cert.name, key_file=tf_key.name)
+                con_client = self.establish_client_con(sys['uuid'])
             else:
                 con_client = self.con
-                tf_cert = None
-                tf_key = None
 
             for sub in system_subs:
                 processed_subs.append(sub['productId'])
@@ -350,11 +359,10 @@ class SMPortal(BasePortal):
                         # unbinding everything else
                         serial = ent['certificates'][0]['serial']['serial']
                         req = self._retr(con_client.unbindBySerial, lambda res: res is not None, 1, True, self.portal_login, sys['uuid'], serial)
-            if tf_cert is not None:
-                os.unlink(tf_cert.name)
-            if tf_key is not None:
-                os.unlink(tf_key.name)
-
+            if con_client.cert_file is not None:
+                os.unlink(con_client.cert_file)
+            if con_client.key_file is not None:
+                os.unlink(con_client.key_file)
         return "<Response [200]>"
 
     def create_systems(self, csv_file, entitlement_dir=None, org=None, subscribe=True, update=False):
@@ -367,10 +375,6 @@ class SMPortal(BasePortal):
         host_systems = {}
 
         self._retr(self.con.ping, lambda res: res is not None, 1, True, self.portal_login)
-
-        if org is None:
-            org = self._retr(self.con.getOwnerList, lambda res: res is not None and res != [] and 'key' in res[0], 1, True, self.portal_login, self.login)[0]['key']
-            self.logger.debug("Using %s owner as org" % org)
 
         data = csv.DictReader(open(csv_file))
         for row in data:
@@ -496,12 +500,26 @@ class SMPortal(BasePortal):
 
     def get_entitlements(self, uuid):
         """ Get entitlements (with certs)"""
-        entitlements_list = self._retr(self.con.getEntitlementList, lambda res: res is not None, 1, True, self.portal_login, uuid)
-        return [self._retr(self.con.getEntitlement, lambda res: res is not None, 1, True, self.portal_login, x['id']) for x in entitlements_list]
+        if 'request_certs' in inspect.getargspec(self.con.getEntitlementList)[0]:
+            entitlements_list = self._retr(self.con.getEntitlementList, lambda res: res is not None, 1, True, self.portal_login, uuid, request_certs=True)
+            return entitlements_list
+        else:
+            entitlements_list = self._retr(self.con.getEntitlementList, lambda res: res is not None, 1, True, self.portal_login, uuid)
+            return [self._retr(self.con.getEntitlement, lambda res: res is not None, 1, True, self.portal_login, x['id']) for x in entitlements_list]
+
+    def get_entitlement_list(self, uuid):
+        """ Get entitlements """
+        return self._retr(self.con.getEntitlementList, lambda res: res is not None, 1, True, self.portal_login, uuid)
 
     def get_owners(self):
         """ Get owners """
         return self._retr(self.con.getOwnerList, lambda res: res is not None, 1, True, self.portal_login, self.con.username)
+
+    def _get_owner_key(self):
+        """ Get first owner key """
+        owners = self._retr(self.con.getOwnerList, lambda res: res is not None and res != [] and 'key' in res[0], 1, True, self.portal_login, self.con.username)
+        self.logger.debug("Owners: %s" % owners)
+        return owners[0]['key']
 
     def get_owner_info(self, owner=None):
         """ Get owner info """
@@ -519,6 +537,10 @@ class SMPortal(BasePortal):
     def checkin_consumer(self, uuid):
         """ Checkin consumer """
         return self._retr(self.con.checkin, lambda res: res is not None, 1, True, self.portal_login, uuid)
+
+    def update_consumer(self, uuid):
+        """ Update consumer """
+        return self._retr(self.con.updateConsumer, lambda res: True, 1, True, self.portal_login, uuid)
 
     def establish_client_con(self, uuid):
         """ Connect with client cert """
