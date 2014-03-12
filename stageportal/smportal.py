@@ -178,7 +178,7 @@ class SMPortal(BasePortal):
         self._retr(self.con.unregisterConsumer, lambda res: True, 1, True, self.portal_login, uuid)
         return "<Response [200]>"
 
-    def _register_hypervisor(self, org=None, sys_name=None):
+    def register_hypervisor(self, org=None, sys_name=None):
         """ Register hypervisor """
         if sys_name is None:
             sys_name = 'TestHypervisor' + ''.join(random.choice('0123456789ABCDEF') for i in range(6))
@@ -188,7 +188,7 @@ class SMPortal(BasePortal):
         self.logger.info("Hypervisor %s created with uid %s" % (sys_name, sys['uuid']))
         return (sys_name, sys['uuid'])
 
-    def _register_system(self, org=None, sys_name=None, cores=1, sockets=1, memory=2, arch='x86_64',
+    def register_system(self, org=None, sys_name=None, cores=1, sockets=1, memory=2, arch='x86_64',
                          dist_name='RHEL', dist_version='6.4', installed_products=[], is_guest=False,
                          virt_uuid='', entitlement_dir=None):
         """ Register system """
@@ -426,10 +426,10 @@ class SMPortal(BasePortal):
                 while ntry < self.maxtries:
                     try:
                         if consumer_type in ['system', 'System']:
-                            (sys_name, sys_uid) = self._register_system(org, name, cores, sockets, memory, arch, dist_name,
+                            (sys_name, sys_uid) = self.register_system(org, name, cores, sockets, memory, arch, dist_name,
                                                                         dist_version, installed_products, is_guest, virt_uuid, entitlement_dir)
                         elif consumer_type in ['hypervisor', 'Hypervisor']:
-                            (sys_name, sys_uid) = self._register_hypervisor(org, name)
+                            (sys_name, sys_uid) = self.register_hypervisor(org, name)
                         else:
                             self.logger.error("Unknown consumer type %s for %s" % (consumer_type, name))
                         break

@@ -78,8 +78,8 @@ class RhnClassicPortal(BasePortal):
         """ Get login token """
         return self._retr(self.rpc_api._request, lambda res: res is not None, 1, True, None, 'auth.login', (self.login, self.password))
 
-    def _register_system(self, sys_name=None, cores=1, memory=2, arch='x86_64', release_name='redhat-release-server',
-                         dist_version='6Server', is_guest=False, org_id=None, basechannel=None):
+    def register_system(self, sys_name=None, cores=1, memory=2, arch='x86_64', release_name='redhat-release-server',
+                        dist_version='6Server', is_guest=False, org_id=None, basechannel=None):
         """ Register system """
         system = {'username': self.login,
                   'password': self.password,
@@ -378,7 +378,7 @@ class RhnClassicPortal(BasePortal):
                 else:
                     is_guest = False
 
-                if self._register_system(name, cores, memory, arch, release, version, is_guest, org, basechannel) is None:
+                if self.register_system(name, cores, memory, arch, release, version, is_guest, org, basechannel) is None:
                     raise RhnClassicPortalException("Failed to register system %s" % name)
 
                 if channels != []:
