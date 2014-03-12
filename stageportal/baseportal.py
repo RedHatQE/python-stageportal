@@ -80,7 +80,7 @@ class BasePortal(object):
                 self.logger.error("%s (args: %s, kwargs %s) failed after %s tries", func, args, kwargs, self.maxtries)
 
             if blow_up is True:
-                raise BasePortalException("%s failed after %s tries, last result: %s" % (func, self.maxtries, res))
+                raise BasePortalException("%s (args: %s, kwargs: %s) failed after %s tries, last result: %s" % (func, args, kwargs, self.maxtries, res))
             else:
                 res = None
         return res
