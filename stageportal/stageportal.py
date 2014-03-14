@@ -91,6 +91,7 @@ def main():
     if args.action == 'get_rhnclassic_channels':
         argparser.add_argument('--xmlrpc', required=True, help='XMLRPC URL')
         argparser.add_argument('--with-labels', default=False, action='store_true', help="Include channel labels (slow)")
+        argparser.add_argument('--satellite', default=False, action='store_true', help="We're connecting to Satellite, not RHN Hosted")
     if args.action == 'get_cdn_content':
         argparser.add_argument('--candlepin', required=True, help='The URL to the stage portal\'s Candlepin.')
         argparser.add_argument('--url', required=True, help='CDN url')
@@ -192,7 +193,7 @@ def main():
         if res is not None:
             res = "<Response [200]>"
     elif args.action == 'get_rhnclassic_channels':
-        res = portal.get_entitlements_list(hosted=True, get_labels=args.with_labels)
+        res = portal.get_entitlements_list(hosted=(not args.satellite), get_labels=args.with_labels)
         res = pprint.pformat(res)
     elif args.action == 'subscriptions_check':
         res = portal.check_subscriptions(args.sub_ids)
