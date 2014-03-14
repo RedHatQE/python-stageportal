@@ -162,11 +162,15 @@ class SMPortal(BasePortal):
         tfile.close()
         return tfile.name
 
+    def _get_satellite_cert(self, uuid):
+        session = self.portal_login()
+        cert = session.get(self.portal_url + "/management/distributors/%s/certificate/satellite?" % uuid, verify=False, headers={'Accept-Language': 'en-US'})
+        self.logger.debug("Got Satellite cert, status: %s, content-type: %s", cert.status_code, cert.headers['content-type'])
+        return cert
+
     def satellite_download_cert(self, uuid):
         """ Download satellite cert """
-        session = self.portal_login()
-        req = self._retr(session.get, lambda res: res.status_code == 200 and res.headers['content-type'] == 'application/octet-stream', 10, True, self.portal_login,
-                         self.portal_url + "/management/distributors/%s/certificate/satellite?" % uuid, verify=False, headers={'Accept-Language': 'en-US'})
+        req = self._retr(self._get_satellite_cert, lambda res: res.status_code == 200 and res.headers['content-type'] == 'application/octet-stream', 10, True, None, uuid)
         tfile = tempfile.NamedTemporaryFile(delete=False, suffix=".xml")
         tfile.write(req.content)
         tfile.close()
