@@ -29,7 +29,8 @@ def main():
                      'heal_org',
                      'systems_register_classic',
                      'get_rhnclassic_channels',
-                     'get_cdn_content']
+                     'get_cdn_content',
+                     'get_pools']
 
     all_actions = pwless_actions + dist_actions + other_actions
 
@@ -97,6 +98,8 @@ def main():
         argparser.add_argument('--url', required=True, help='CDN url')
         argparser.add_argument('--uuid', required=True, help='Consumer UUID')
         argparser.add_argument('--save', required=False, help='Save file to specified location')
+    if args.action == 'get_pools':
+        argparser.add_argument('--candlepin', required=True, help='The URL to the stage portal\'s Candlepin.')
 
     if not args.action in pwless_actions:
         password_required = True
@@ -206,6 +209,9 @@ def main():
             with open(fname, 'w') as fd:
                 fd.write(res.content)
                 sys.stdout.write('%s downloaded\n' % fname)
+    elif args.action == 'get_pools':
+        res = portal.get_pools()
+        res = pprint.pformat(res)
     else:
         sys.stderr.write('Unknown action: %s\n' % args.action)
         sys.exit(1)
