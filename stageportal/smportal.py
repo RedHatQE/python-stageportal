@@ -462,12 +462,21 @@ class SMPortal(BasePortal):
             # setting host/guest allocation
             host_detail = host_systems[host]
             if len(host_detail) > 1:
-                self.logger.debug("Setting host/guest allocation for %s, VMs: %s" % (host_detail[0], host_detail[1::]))
-                self._retr(self.con.updateConsumer, lambda res: True, 1, True, self.portal_login, host_detail[0], guest_uuids=host_detail[1::])
+                self.set_hostguest_allocation(host_detail[0], host_detail[1::])
 
         if subscribe:
             return self.subscribe_systems(systems=all_systems, csv_file=None, org=org, update=update)
         return all_systems
+
+    def set_hostguest_allocation(self, host_uuid, guest_uuids, update=False):
+        """ Set host/guest allocation """
+        if update:
+            existing_guests = self._retr(self.con.getConsumer, lambda res: res is not None, 1, True, self.portal_login, host_uuid)['guestIds']
+            self.logger.debug("Existing guests attached to %s: %s", host_uuid, existing_guests)
+        else:
+            existing_guests = []
+        self.logger.debug("Setting host/guest allocation for %s, VMs: %s", host_uuid, existing_guests + guest_uuids)
+        return self._retr(self.con.updateConsumer, lambda res: True, 1, True, self.portal_login, host_uuid, guest_uuids=existing_guests + guest_uuids)
 
     def heal_entire_org(self, owner=None, wait=False, timeout=None):
         """ Heal Entire Org """

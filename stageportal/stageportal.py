@@ -4,6 +4,7 @@ import argparse
 import logging
 import sys
 import pprint
+import random
 
 
 def main():
@@ -24,6 +25,8 @@ def main():
                     'satellite_create',
                     'satellite_get_certificate']
     other_actions = ['user_create',
+                     'system_register',
+                     'system_subscribe',
                      'systems_register',
                      'subscriptions_check',
                      'heal_org',
@@ -40,11 +43,12 @@ def main():
                            help='Requested action', choices=all_actions)
     argparser.add_argument('--login', required=True, help='User login')
     argparser.add_argument('--verbose', default=False, action='store_true', help="Verbose bode")
+    argparser.add_argument('--debug', default=False, action='store_true', help="Debug bode")
     argparser.add_argument('--maxtries', type=int, default=20, help="Maximum retries count")
 
     [args, _] = argparser.parse_known_args()
 
-    if args.verbose:
+    if args.debug:
         logging.getLogger("python-stageportal").setLevel(logging.DEBUG)
 
     portal_required = False
@@ -77,10 +81,27 @@ def main():
     if args.action == 'heal_org':
         argparser.add_argument('--candlepin', required=True, help='The URL to the stage portal\'s Candlepin.')
         argparser.add_argument('--org', required=False, help='Org to heal (standalone candlepin).')
+    if args.action == 'system_register':
+        argparser.add_argument('--candlepin', required=True, help='The URL to the stage portal\'s Candlepin.')
+        argparser.add_argument('--org', required=False, help='Create systems within org (standalone candlepin).')
+        argparser.add_argument('--system-name', help="System name")
+        argparser.add_argument('--system-cores', type=int, default=1, help="System cores")
+        argparser.add_argument('--system-sockets', type=int, default=1, help="System sockets")
+        argparser.add_argument('--system-memory', type=int, default=2, help="System memory (GB)")
+        argparser.add_argument('--system-arch', default='x86_64', help="System arch")
+        argparser.add_argument('--system-dist-name', default='RHEL', help="System distribution")
+        argparser.add_argument('--system-dist-version', default='6.4', help="System distribution version")
+        argparser.add_argument('--system-products', default="69|Red Hat Enterprise Linux Server", help='Semicolon-separated list of installed products (EngID|Name pairs)')
+        argparser.add_argument('--system-is-guest', required=False, action='store_true', default=False, help='Is system virtual?')
+        argparser.add_argument('--system-virt-uuid', default='', help="Virtual UUID")
+        argparser.add_argument('--system-host-uuid', help="Host's UUID for host/guest allocation")
+    if args.action == 'system_subscribe':
+        argparser.add_argument('--candlepin', required=True, help='The URL to the stage portal\'s Candlepin.')
+        argparser.add_argument('--uuid', required=True, help='Consumer UUID')
+        argparser.add_argument('--pool-id', required=False, help='Pool id (will be selected automatically if not set)')
     if args.action == 'systems_register':
         argparser.add_argument('--candlepin', required=True, help='The URL to the stage portal\'s Candlepin.')
         argparser.add_argument('--csv', required=True, help='CSV file with systems definition.')
-        argparser.add_argument('--entitlement-dir', required=False, help='Save entitlement data to dir.')
         argparser.add_argument('--org', required=False, help='Create systems within org (standalone candlepin).')
     if args.action == 'subscriptions_check':
         argparser.add_argument('--candlepin', required=True, help='The URL to the stage portal\'s Candlepin.')
@@ -188,13 +209,43 @@ def main():
         elif args.action == 'satellite_get_certificate':
             res = portal.satellite_download_cert(distributor_uuid)
     elif args.action == 'systems_register':
-        res = portal.create_systems(args.csv, args.entitlement_dir, args.org)
+        res = portal.create_systems(args.csv, org=args.org)
+        if res is not None and not args.verbose:
+            res = "<Response [200]>"
+        elif res is not None:
+            res = pprint.pformat(res)
+    elif args.action == 'system_register':
+        installed_products = []
+        if args.system_is_guest and args.system_virt_uuid == '':
+            virt_uuid = ''.join(random.choice('0123456789abcdef') for i in range(16))
+        elif args.system_is_guest:
+            virt_uuid = args.system_virt_uuid
+
+        if args.system_products != '':
+            for product in args.system_products.split(';'):
+                [product_number, product_name] = product.split('|')
+                installed_products.append({'productId': int(product_number), 'productName': product_name})
+        _, res = portal.register_system(org=args.org, sys_name=args.system_name, cores=args.system_cores,
+                                        sockets=args.system_sockets, memory=args.system_memory, arch=args.system_arch,
+                                        dist_name=args.system_dist_name, dist_version=args.system_dist_version,
+                                        installed_products=installed_products, is_guest=args.system_is_guest,
+                                        virt_uuid=virt_uuid)
+        if args.system_host_uuid is not None and args.system_is_guest == True:
+            portal.set_hostguest_allocation(args.system_host_uuid, [virt_uuid], True)
         if res is not None:
             res = "<Response [200]>"
+    elif args.action == 'system_subscribe':
+        res = portal.subscribe_system(args.uuid, args.pool_id)
+        if res is not None and not args.verbose:
+            res = "<Response [200]>"
+        elif res is not None:
+            res = pprint.pformat(res)
     elif args.action == 'systems_register_classic':
         res = portal.create_systems(args.csv, args.org)
-        if res is not None:
+        if res is not None and not args.verbose:
             res = "<Response [200]>"
+        elif res is not None:
+            res = pprint.pformat(res)
     elif args.action == 'get_rhnclassic_channels':
         res = portal.get_entitlements_list(hosted=(not args.satellite), get_labels=args.with_labels)
         res = pprint.pformat(res)
@@ -210,12 +261,26 @@ def main():
                 fd.write(res.content)
                 sys.stdout.write('%s downloaded\n' % fname)
     elif args.action == 'get_pools':
-        res = portal.get_pools()
-        res = pprint.pformat(res)
+        pools = portal.get_pools()
+        if pools is not None and args.verbose:
+            res = pprint.pformat(pools)
+        elif pools is not None:
+            res = []
+            for pool in pools:
+                res.append({'id': pool['id'],
+                            'productId': pool['productId'],
+                            'quantity': pool['quantity'],
+                            'consumed': pool['consumed'],
+                            'EngIDs': [pp['productId'] for pp in pool['providedProducts']],
+                            'sourceStackId': pool['sourceStackId'],
+                            'endDate': pool['endDate'],
+                            'startDate': pool['startDate']
+                        })
+            res = pprint.pformat(res)
     else:
         sys.stderr.write('Unknown action: %s\n' % args.action)
         sys.exit(1)
-    sys.stdout.write('%s\n' % res)
+    sys.stdout.write('%s\n' % str(res))
     if res in [[], None]:
         sys.exit(1)
 
