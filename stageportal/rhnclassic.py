@@ -27,15 +27,32 @@ class RhnClassicPortalException(BasePortalException):
 class RhnClassicPortal(BasePortal):
     """ RhnClassicPortal """
 
-    def __init__(self, xmlrpc_url=None, login='admin', password='admin', maxtries=40, insecure=None, webui_url=None, api_url=None, portal_url=None):
-        BasePortal.__init__(self, login, password, maxtries, insecure, api_url, portal_url)
-        self.xmlrpc_url = xmlrpc_url
-        self.rpc = rpclib.Server(xmlrpc_url)
-        self.rpc_api = rpclib.Server(xmlrpc_url.replace('/XMLRPC', '/rpc/api'))
+    def __init__(self, xmlrpc_url=None, login='admin', password='admin', maxtries=40, insecure=None, webui_url=None, api_url=None, portal_url=None, configfile=None):
+        BasePortal.__init__(self, login, password, maxtries, insecure, api_url, portal_url, configfile)
+
+        if xmlrpc_url is not None:
+            self.xmlrpc_url = xmlrpc_url
+        else:
+            try:
+                self.xmlrpc_url = self.config.get('rhn', 'xmlrpc')
+            except:
+                self.logger.debug("Failed to get 'rhn/xmlrpc' setting from config file")
+                self.xmlrpc_url = None
+
+        if webui_url is not None:
+            self.webui_url = webui_url
+        else:
+            try:
+                self.webui_url = self.config.get('rhn', 'webui')
+            except:
+                self.logger.debug("Failed to get 'rhn/webui' setting from config file")
+                self.webui_url = None
+
+        self.rpc = rpclib.Server(self.xmlrpc_url)
+        self.rpc_api = rpclib.Server(self.xmlrpc_url.replace('/XMLRPC', '/rpc/api'))
         self.systems = {}
-        self.webui_url = webui_url
-        if webui_url is None:
-            self.webui_url = xmlrpc_url
+        if self.webui_url is None:
+            self.webui_url = self.xmlrpc_url
             self.webui_url = self.webui_url.replace('/XMLRPC', '')
             self.webui_url = self.webui_url.replace('http://xmlrpc.', 'http://')
             self.webui_url = self.webui_url.replace('https://xmlrpc.', 'https://')

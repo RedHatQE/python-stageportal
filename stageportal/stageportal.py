@@ -45,27 +45,23 @@ def main():
     argparser.add_argument('--verbose', default=False, action='store_true', help="Verbose bode")
     argparser.add_argument('--debug', default=False, action='store_true', help="Debug bode")
     argparser.add_argument('--maxtries', type=int, default=20, help="Maximum retries count")
+    argparser.add_argument('--portal', required=False, help='Portal access URL')
+    argparser.add_argument('--api', required=False, help='API url (forcreating customers and adding subs')
+    argparser.add_argument('--candlepin', required=False, help='Candlepin URL')
+    argparser.add_argument('--config', required=False, help='Config file (defaults to /etc/stageportal.cfg)')
+    argparser.add_argument('--xmlrpc', required=False, help='XMLRPC URL (for RHN)')
 
     [args, _] = argparser.parse_known_args()
 
     if args.debug:
         logging.getLogger("python-stageportal").setLevel(logging.DEBUG)
 
-    portal_required = False
-    if args.action in ['distributor_get_manifest']:
-        portal_required = True
-
-    argparser.add_argument('--portal', required=portal_required, help='The URL to the stage portal.')
-
-    if args.action in ['user_create', 'user_get', 'sku_add']:
-        argparser.add_argument('--api', required=True, help='The URL to the stage portal\'s API.')
-        if args.action == 'sku_add':
-            argparser.add_argument('--sku-id', required=False, help='SKU id to add')
-            argparser.add_argument('--sku-quantity', required=False, help='SKU quantity to add')
-            argparser.add_argument('--sku-start-date', required=False, help='SKU start date')
-            argparser.add_argument('--csv', required=False, help='CSV file with SKUs.')
+    if args.action == 'sku_add':
+        argparser.add_argument('--sku-id', required=False, help='SKU id to add')
+        argparser.add_argument('--sku-quantity', required=False, help='SKU quantity to add')
+        argparser.add_argument('--sku-start-date', required=False, help='SKU start date')
+        argparser.add_argument('--csv', required=False, help='CSV file with SKUs.')
     if args.action in dist_actions:
-        argparser.add_argument('--candlepin', required=True, help='The URL to the stage portal\'s Candlepin.')
         if args.action in ['distributor_create', 'satellite_create']:
             argparser.add_argument('--distributor-name', required=True, help='Distributor name')
         else:
@@ -79,10 +75,8 @@ def main():
         if args.action == 'distributor_detach_subscriptions':
             argparser.add_argument('--sub-ids', required=True, nargs='+', help='sub ids to detach from distributor (space separated list)')
     if args.action == 'heal_org':
-        argparser.add_argument('--candlepin', required=True, help='The URL to the stage portal\'s Candlepin.')
         argparser.add_argument('--org', required=False, help='Org to heal (standalone candlepin).')
     if args.action == 'system_register':
-        argparser.add_argument('--candlepin', required=True, help='The URL to the stage portal\'s Candlepin.')
         argparser.add_argument('--org', required=False, help='Create systems within org (standalone candlepin).')
         argparser.add_argument('--system-name', help="System name")
         argparser.add_argument('--system-cores', type=int, default=1, help="System cores")
@@ -96,31 +90,25 @@ def main():
         argparser.add_argument('--system-virt-uuid', default='', help="Virtual UUID")
         argparser.add_argument('--system-host-uuid', help="Host's UUID for host/guest allocation")
     if args.action == 'system_subscribe':
-        argparser.add_argument('--candlepin', required=True, help='The URL to the stage portal\'s Candlepin.')
         argparser.add_argument('--uuid', required=True, help='Consumer UUID')
         argparser.add_argument('--pool-id', required=False, help='Pool id (will be selected automatically if not set)')
     if args.action == 'systems_register':
-        argparser.add_argument('--candlepin', required=True, help='The URL to the stage portal\'s Candlepin.')
         argparser.add_argument('--csv', required=True, help='CSV file with systems definition.')
         argparser.add_argument('--org', required=False, help='Create systems within org (standalone candlepin).')
     if args.action == 'subscriptions_check':
-        argparser.add_argument('--candlepin', required=True, help='The URL to the stage portal\'s Candlepin.')
         argparser.add_argument('--sub-ids', required=True, nargs='+', help='sub ids to check (space separated list)')
     if args.action == 'systems_register_classic':
-        argparser.add_argument('--xmlrpc', required=True, help='XMLRPC URL')
         argparser.add_argument('--csv', required=True, help='CSV file with systems definition.')
         argparser.add_argument('--org', required=False, help='Create systems within org (standalone Satellite).')
     if args.action == 'get_rhnclassic_channels':
-        argparser.add_argument('--xmlrpc', required=True, help='XMLRPC URL')
         argparser.add_argument('--with-labels', default=False, action='store_true', help="Include channel labels (slow)")
         argparser.add_argument('--satellite', default=False, action='store_true', help="We're connecting to Satellite, not RHN Hosted")
     if args.action == 'get_cdn_content':
-        argparser.add_argument('--candlepin', required=True, help='The URL to the stage portal\'s Candlepin.')
         argparser.add_argument('--url', required=True, help='CDN url')
         argparser.add_argument('--uuid', required=True, help='Consumer UUID')
         argparser.add_argument('--save', required=False, help='Save file to specified location')
     if args.action == 'get_pools':
-        argparser.add_argument('--candlepin', required=True, help='The URL to the stage portal\'s Candlepin.')
+        pass
 
     if not args.action in pwless_actions:
         password_required = True
@@ -138,32 +126,12 @@ def main():
         sys.stderr.write('You should specify --csv or --sku-id, --sku-quantity and --sku-start-date\n')
         sys.exit(1)
 
-    if 'api' in args:
-        api = args.api
-    else:
-        api = None
-
-    if 'candlepin' in args:
-        candlepin = args.candlepin.replace("https://", "")
-    else:
-        candlepin = None
-
-    if 'portal' in args:
-        portal = args.portal
-    else:
-        portal = None
-
-    if 'xmlrpc' in args:
-        xmlrpc = args.xmlrpc
-    else:
-        xmlrpc = None
-
     if args.action in ['systems_register_classic', 'get_rhnclassic_channels']:
         from rhnclassic import RhnClassicPortal
-        portal = RhnClassicPortal(xmlrpc_url=xmlrpc, portal_url=portal, login=args.login, password=args.password, maxtries=args.maxtries)
+        portal = RhnClassicPortal(xmlrpc_url=args.xmlrpc, portal_url=args.portal, login=args.login, password=args.password, maxtries=args.maxtries, config=args.config)
     else:
         from smportal import SMPortal
-        portal = SMPortal(api_url=api, candlepin_url=candlepin, portal_url=portal, login=args.login, password=args.password, maxtries=args.maxtries)
+        portal = SMPortal(api_url=args.api, candlepin_url=args.candlepin, portal_url=args.portal, login=args.login, password=args.password, maxtries=args.maxtries, configfile=args.config)
 
     if args.action == 'user_create':
         res = portal.create_user()
@@ -220,6 +188,8 @@ def main():
             virt_uuid = ''.join(random.choice('0123456789abcdef') for i in range(16))
         elif args.system_is_guest:
             virt_uuid = args.system_virt_uuid
+        else:
+            virt_uuid = ''
 
         if args.system_products != '':
             for product in args.system_products.split(';'):
@@ -274,7 +244,9 @@ def main():
                             'EngIDs': [pp['productId'] for pp in pool['providedProducts']],
                             'sourceStackId': pool['sourceStackId'],
                             'endDate': pool['endDate'],
-                            'startDate': pool['startDate']
+                            'startDate': pool['startDate'],
+                            'subscriptionSubKey': pool['subscriptionSubKey'],
+                            'type': pool['type']
                         })
             res = pprint.pformat(res)
     else:

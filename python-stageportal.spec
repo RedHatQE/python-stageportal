@@ -32,6 +32,7 @@ rm -rf $RPM_BUILD_ROOT
 %files
 %defattr(-,root,root,-)
 %doc COPYING
+%config(noreplace) %attr(0644, root, root) %{_sysconfdir}/stageportal.cfg
 %{_bindir}/stageportal
 %{python_sitelib}/stageportal/*.py*
 %{python_sitelib}/*.egg-info

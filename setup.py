@@ -13,6 +13,7 @@ setup(
     license='COPYING',
     description='Python library and cli to work with stage portal.',
     long_description=open('README.md').read(),
+    data_files = [('/etc', ['etc/stageportal.cfg'])],
     install_requires=[
         "requests",
         "rhsm",

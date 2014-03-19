@@ -25,9 +25,20 @@ class SMPortalException(BasePortalException):
 class SMPortal(BasePortal):
     """ SMPortal """
 
-    def __init__(self, api_url=None, candlepin_url=None, portal_url=None, login='admin', password='admin', maxtries=40, insecure=None):
-        BasePortal.__init__(self, login, password, maxtries, insecure, api_url, portal_url)
-        self.candlepin_url = candlepin_url
+    def __init__(self, api_url=None, candlepin_url=None, portal_url=None, login='admin', password='admin', maxtries=40, insecure=None, configfile=None):
+        BasePortal.__init__(self, login, password, maxtries, insecure, api_url, portal_url, configfile)
+        if candlepin_url is not None:
+            self.candlepin_url = candlepin_url
+        else:
+            try:
+                self.candlepin_url = self.config.get('subman', 'candlepin')
+            except:
+                self.logger.debug("Failed to get 'subman/candlepin' setting from config file")
+                self.candlepin_url = None
+
+        if self.candlepin_url:
+            self.candlepin_url = self.candlepin_url.replace("https://", "")
+
         self.con = connection.UEPConnection(self.candlepin_url, username=self.login, password=self.password, insecure=insecure)
 
     def _get_subscriptions(self):

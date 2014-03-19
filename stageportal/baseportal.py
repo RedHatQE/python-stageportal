@@ -9,6 +9,7 @@ import requests
 import json
 import time
 import datetime
+import ConfigParser
 
 
 class BasePortalException(Exception):
@@ -18,19 +19,38 @@ class BasePortalException(Exception):
 
 class BasePortal(object):
     """ BasePortal """
-    api_url = "http://example.com/svcrest"
-    portal_url = "https://access.example.com"
 
-    def __init__(self, login='admin', password='admin', maxtries=40, insecure=None, api_url=None, portal_url=None):
+    def __init__(self, login='admin', password='admin', maxtries=40, insecure=None, api_url=None, portal_url=None, configfile=None):
         self.logger = logging.getLogger("python-stageportal")
         self.maxtries = maxtries
         self.insecure = insecure
         self.login = login
         self.password = password
+        self.config = ConfigParser.ConfigParser()
+        if configfile is None:
+            configfile = '/etc/stageportal.cfg'
+        try:
+            self.config.read(configfile)
+        except:
+            self.logger.error("Failed to read config file: %s" % configfile)
+
         if api_url is not None:
             self.api_url = api_url
+        else:
+            try:
+                self.api_url = self.config.get('main', 'api')
+            except:
+                self.logger.debug("Failed to get 'main/api' setting from config file")
+                self.api_url = None
+
         if portal_url is not None:
             self.portal_url = portal_url
+        else:
+            try:
+                self.portal_url = self.config.get('main', 'portal')
+            except:
+                self.logger.debug("Failed to get 'main/portal' setting from config file")
+                self.portal_url = None
 
     @staticmethod
     def _namify(name, row):
