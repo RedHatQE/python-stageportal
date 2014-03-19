@@ -1,5 +1,5 @@
 Name:		python-stageportal
-Version:	0.1
+Version:	0.2
 Release:	1%{?dist}
 Summary:	Python library and cli to work with stage portal
 
@@ -38,6 +38,8 @@ rm -rf $RPM_BUILD_ROOT
 %{python_sitelib}/*.egg-info
 
 %changelog
+* Wed Mar 19 2014 Vitaly Kuznetsov <vitty@redhat.com> 0.2-1
+- new version (vitty@redhat.com)
 * Tue Jul 30 2013 Vitaly Kuznetsov <vitty@redhat.com> 0.1-1
 - new package built with tito
 
