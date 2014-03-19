@@ -128,7 +128,7 @@ def main():
 
     if args.action in ['systems_register_classic', 'get_rhnclassic_channels']:
         from rhnclassic import RhnClassicPortal
-        portal = RhnClassicPortal(xmlrpc_url=args.xmlrpc, portal_url=args.portal, login=args.login, password=args.password, maxtries=args.maxtries, config=args.config)
+        portal = RhnClassicPortal(xmlrpc_url=args.xmlrpc, portal_url=args.portal, login=args.login, password=args.password, maxtries=args.maxtries, configfile=args.config)
     else:
         from smportal import SMPortal
         portal = SMPortal(api_url=args.api, candlepin_url=args.candlepin, portal_url=args.portal, login=args.login, password=args.password, maxtries=args.maxtries, configfile=args.config)
