@@ -33,7 +33,8 @@ def main():
                      'systems_register_classic',
                      'get_rhnclassic_channels',
                      'get_cdn_content',
-                     'get_pools']
+                     'get_pools',
+                     'get_client_compliance']
 
     all_actions = pwless_actions + dist_actions + other_actions
 
@@ -109,6 +110,8 @@ def main():
         argparser.add_argument('--save', required=False, help='Save file to specified location')
     if args.action == 'get_pools':
         pass
+    if args.action == 'get_client_compliance':
+        argparser.add_argument('--uuid', required=True, help='Consumer UUID')
 
     if not args.action in pwless_actions:
         password_required = True
@@ -223,6 +226,20 @@ def main():
         res = portal.check_subscriptions(args.sub_ids)
     elif args.action == 'heal_org':
         res = portal.heal_entire_org()
+        if not args.verbose:
+            res = pprint.pformat(res)
+        elif res is not None:
+            res = pprint.pformat(res.content)
+    elif args.action == 'get_client_compliance':
+        res = portal.get_client_compliance(args.uuid)
+        if not args.verbose:
+            res = {'status': res['status'],
+                   'compliantProducts': [prod for prod in res['compliantProducts']],
+                   'nonCompliantProducts': [prod for prod in res['nonCompliantProducts']],
+                   'partiallyCompliantProducts': [prod for prod in res['partiallyCompliantProducts']],
+                   'compliantUntil': res['compliantUntil']
+               }
+        res = pprint.pformat(res)
     elif args.action == 'get_cdn_content':
         res = portal.cdn_get_file(args.uuid, args.url)
         if res is not None and res.status_code == 200 and args.save is not None:

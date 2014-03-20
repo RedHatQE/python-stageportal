@@ -194,14 +194,24 @@ test_one%d,1,,,,N,,6Server,x86_64,1,4,,Standard,69|Red Hat Enterprise Linux Serv
 test_one1.vm%d,1,,,,Y,test_one1,6Server,x86_64,1,4,,Standard,69|Red Hat Enterprise Linux Server,"RH0192098|Red Hat Enterprise Linux Server, Standard (1-2 sockets) (Unlimited guests)"
 ```
 
+Getting client compliance status:
+```
+stageportal --login samplecustomer01 --password changeme --action get_client_compliance --uuid a9ca9021-593f-4d56-a0a3-5fee52a17da8
+{'compliantProducts': ['69'],
+ 'compliantUntil': '2015-02-28T05:00:00.000+0000',
+ 'nonCompliantProducts': [],
+ 'partiallyCompliantProducts': [],
+ 'status': 'valid'}
+```
+
 Testing CDN access:
 ```
 # Test-only mode:
-stageportal --login samplecustomer01 --password changeme --action get_cdn_content --uuid a9ca9021-593f-4d56-a0a3-5fee52a17da8  --url https://cdn.example.com/path/Packages/package-1.0.0.el6.x86_64.rpm
+stageportal --login samplecustomer01 --password changeme --action get_cdn_content --uuid a9ca9021-593f-4d56-a0a3-5fee52a17da8 --url https://cdn.example.com/path/Packages/package-1.0.0.el6.x86_64.rpm
 <Response [200]>
 
 # Saving CDN content:
-stageportal --login samplecustomer01 --password changeme --action get_cdn_content --uuid a9ca9021-593f-4d56-a0a3-5fee52a17da8  --url https://cdn.example.com/path/Packages/package-1.0.0.el6.x86_64.rpm --save /tmp
+stageportal --login samplecustomer01 --password changeme --action get_cdn_content --uuid a9ca9021-593f-4d56-a0a3-5fee52a17da8 --url https://cdn.example.com/path/Packages/package-1.0.0.el6.x86_64.rpm --save /tmp
 /tmp/package-1.0.0.el6.x86_64.rpm downloaded
 <Response [200]>
 ```
@@ -209,7 +219,7 @@ stageportal --login samplecustomer01 --password changeme --action get_cdn_conten
 'Heal entire org':
 ```
 stageportal --login samplecustomer01 --password changeme --action heal_org
-{u'finishTime': None, u'targetType': u'owner', u'updated': u'2013-10-22T09:16:25.791+0000', u'group': u'async group', u'created': u'2013-10-22T09:16:25.791+0000', u'statusPath': u'/jobs/heal_entire_org_1a259d55-067a-4b7e-b19a-ddc56cd8d6b9', u'targetId': u'target_id', u'principalName': u'samplecustomer01', u'state': u'CREATED', u'result': None, u'startTime': None, u'id': u'heal_entire_org_1a259d55-067a-4b7e-b19a-ddc56cd8d6b9'}
+<Response [202]>
 ```
 
 Bulk systems registration with RHN Classic tooling (with CSV file):
