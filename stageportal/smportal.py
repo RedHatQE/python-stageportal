@@ -25,8 +25,11 @@ class SMPortalException(BasePortalException):
 class SMPortal(BasePortal):
     """ SMPortal """
 
-    def __init__(self, api_url=None, candlepin_url=None, portal_url=None, login='admin', password='admin', maxtries=40, insecure=None, configfile=None):
+    def __init__(self, api_url=None, candlepin_url=None, portal_url=None, login='admin', password='admin', maxtries=40, insecure=None, configfile=None, candlepin_port=443):
         BasePortal.__init__(self, login, password, maxtries, insecure, api_url, portal_url, configfile)
+
+        self.candlepin_port = candlepin_port
+
         if candlepin_url is not None:
             self.candlepin_url = candlepin_url
         else:
@@ -39,7 +42,7 @@ class SMPortal(BasePortal):
         if self.candlepin_url:
             self.candlepin_url = self.candlepin_url.replace("https://", "")
 
-        self.con = connection.UEPConnection(self.candlepin_url, username=self.login, password=self.password, insecure=insecure)
+        self.con = connection.UEPConnection(self.candlepin_url, ssl_port=self.candlepin_port, username=self.login, password=self.password, insecure=self.insecure)
 
     def _get_subscriptions(self):
         """ Get existing subsctiptions """
@@ -576,7 +579,7 @@ class SMPortal(BasePortal):
         tf_key = tempfile.NamedTemporaryFile(delete=False, suffix=".pem")
         tf_key.write(data['idCert']['key'])
         tf_key.close()
-        con_client = connection.UEPConnection(self.candlepin_url, insecure=self.insecure, cert_file=tf_cert.name, key_file=tf_key.name)
+        con_client = connection.UEPConnection(self.candlepin_url, ssl_port=self.candlepin_port, insecure=self.insecure, cert_file=tf_cert.name, key_file=tf_key.name)
         self.logger.debug("Created client connection for %s", uuid)
         return con_client
 
