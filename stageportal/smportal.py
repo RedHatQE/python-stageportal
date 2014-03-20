@@ -593,33 +593,41 @@ class SMPortal(BasePortal):
         os.unlink(con_client.key_file)
         return ret
 
-    def cdn_get_file(self, uuid, url, verify=False):
-        """ Try accessing content on CDN """
-        self.logger.debug("Checking content access, uuid: %s, url: %s", uuid, url)
+    def get_client_entitlements(self, uuid):
+        """ Get all client entitlements """
         con_client = self.establish_client_con(uuid)
         assert con_client is not None
         if 'request_certs' in inspect.getargspec(self.con.getEntitlementList)[0]:
             entitlements = self._retr(con_client.getEntitlementList, lambda res: res is not None, 1, True, self.portal_login, uuid, request_certs=True)
         else:
-            entitlements = self._retr(con_client.getEntitlementList, lambda res: res is not None, 1, True, self.portal_login, uuid)
-        req = None
-        for entitlement in entitlements:
-            # Try all entitlements available
-            if 'cert' in entitlement['certificates'][0]:
-                entitlement_data = entitlement
-            else:
+            entitlements = []
+            entitlements_list = self._retr(con_client.getEntitlementList, lambda res: res is not None, 1, True, self.portal_login, uuid)
+            for entitlement in entitlements_list:
                 entitlement_data = self._retr(con_client.getEntitlement, lambda res: res is not None, 1, True, self.portal_login, entitlement['id'])
-            tcert = tempfile.NamedTemporaryFile(delete=False)
-            tkey = tempfile.NamedTemporaryFile(delete=False)
-            tcert.write(entitlement_data['certificates'][0]['cert'])
-            tkey.write(entitlement_data['certificates'][0]['key'])
-            tcert.close()
-            tkey.close()
-            req = self._retr(requests.get, lambda res: res is not None, 1, True, None, url, verify=verify, cert=(tcert.name, tkey.name))
-            os.unlink(tcert.name)
-            os.unlink(tkey.name)
-            if req.status_code == 200:
-                break
+                entitlements.append(entitlement_data)
         os.unlink(con_client.cert_file)
         os.unlink(con_client.key_file)
+        return entitlements
+
+    def cdn_get_file(self, uuid, url, verify=False, entitlements=None):
+        """ Try accessing content on CDN """
+        self.logger.debug("Checking content access, uuid: %s, url: %s", uuid, url)
+        con_client = self.establish_client_con(uuid)
+        if entitlements is None:
+            entitlements = self.get_client_entitlements(uuid)
+        req = None
+        for entitlement in entitlements:
+            tcert = tempfile.NamedTemporaryFile(delete=False)
+            tkey = tempfile.NamedTemporaryFile(delete=False)
+            try:
+                tcert.write(entitlement['certificates'][0]['cert'])
+                tkey.write(entitlement['certificates'][0]['key'])
+                tcert.close()
+                tkey.close()
+                req = self._retr(requests.get, lambda res: res is not None, 1, True, None, url, verify=verify, cert=(tcert.name, tkey.name))
+            finally:
+                os.unlink(tcert.name)
+                os.unlink(tkey.name)
+            if req.status_code == 200:
+                break
         return req
