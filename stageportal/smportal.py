@@ -109,7 +109,8 @@ class SMPortal(BasePortal):
                                           'subscriptionId': pool['subscriptionId'],
                                           'productId': pool['productId'],
                                           'date_start': pool['startDate'],
-                                          'date_end': pool['endDate']})
+                                          'date_end': pool['endDate'],
+                                          'subscriptionId': pool['subscriptionId']})
         return subscriptions
 
     def distributor_attached_subscriptions(self, uuid):
@@ -127,6 +128,7 @@ class SMPortal(BasePortal):
                                   'quantity': pool['consumed'],
                                   'date_start': pool['startDate'],
                                   'date_end': pool['endDate'],
+                                  'subscriptionId': pool['subscriptionId'],
                                   'serials': serials})
         return subscriptions
 
