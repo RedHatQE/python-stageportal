@@ -46,7 +46,6 @@ class SMPortal(BasePortal):
 
     def _get_subscriptions(self):
         """ Get existing subsctiptions """
-        self._retr(self.con.ping, lambda res: res is not None, 1, True, self.portal_login)
         owners = self._retr(self.con.getOwnerList, lambda res: res is not None, 1, True, self.portal_login, self.login)
         self.logger.debug("Owners: %s" % owners)
         subscriptions = []
@@ -73,14 +72,12 @@ class SMPortal(BasePortal):
 
     def create_distributor(self, name, distributor_version='sam-1.3'):
         """ Create new SAM distributor on portal"""
-        self._retr(self.con.ping, lambda res: res is not None, 1, True, self.portal_login)
         distributor = self._retr(self.con.registerConsumer, lambda res: 'uuid' in res, 1, True, self.portal_login,
                                  name=name, type={'id': '5', 'label': 'sam', 'manifest': True}, facts={'distributor_version': distributor_version})
         return distributor['uuid']
 
     def create_satellite(self, name, distributor_version='sat-5.6'):
         """ Create new Satellite5 distributor on portal"""
-        self._retr(self.con.ping, lambda res: res is not None, 1, True, self.portal_login)
         distributor = self._retr(self.con.registerConsumer, lambda res: 'uuid' in res, 1, True, self.portal_login,
                                  name=name, type={'id': '9', 'label': 'satellite', 'manifest': True},
                                  facts={'distributor_version': distributor_version, 'system.certificate_version': '3.0'})
@@ -88,7 +85,6 @@ class SMPortal(BasePortal):
 
     def distributor_available_subscriptions(self, uuid):
         """ Get available/attached subscriptions """
-        self._retr(self.con.ping, lambda res: res is not None, 1, True, self.portal_login)
         owners = self._retr(self.con.getOwnerList, lambda res: 'key' in res[0], 1, True, self.portal_login, self.login)
         subscriptions = []
         for own in owners:
@@ -115,7 +111,6 @@ class SMPortal(BasePortal):
 
     def distributor_attached_subscriptions(self, uuid):
         """ Get available/attached subscriptions """
-        self._retr(self.con.ping, lambda res: res is not None, 1, True, self.portal_login)
         subscriptions = []
         entitlements = self._retr(self.con.getEntitlementList, lambda res: res is not None, 1, True, self.portal_login, consumerId=uuid)
         for entitlement in entitlements:
@@ -138,7 +133,6 @@ class SMPortal(BasePortal):
 
     def distributor_attach_subscriptions(self, uuid, subscriptions=None):
         """ Attach subscriptions to distributor """
-        self._retr(self.con.ping, lambda res: res is not None, 1, True, self.portal_login)
         if subscriptions is None:
             subscriptions = self.distributor_available_subscriptions(uuid)
             for sub in subscriptions:
@@ -164,7 +158,6 @@ class SMPortal(BasePortal):
         diff = list(set(subscriptions) - set(detach_subs))
         if len(diff) != 0:
             raise SMPortalException("Can't detach subs: %s" % diff)
-        self.con.ping()
         for serial in detach_serials:
             self._retr(self.con.unbindBySerial, lambda res: True, 1, True, self.portal_login, uuid, serial)
         return "<Response [200]>"
@@ -194,7 +187,6 @@ class SMPortal(BasePortal):
 
     def unregister_consumer(self, uuid):
         """ Unregister consumer """
-        self._retr(self.con.ping, lambda res: res is not None, 1, True, self.portal_login)
         return self._retr(self.con.unregisterConsumer, lambda res: True, 1, True, self.portal_login, uuid)
 
     def delete_distributor(self, uuid):
@@ -280,7 +272,6 @@ class SMPortal(BasePortal):
 
     def subscribe_systems(self, systems=None, csv_file=None, org=None, update=False):
         """ Subscribe systems """
-        self._retr(self.con.ping, lambda res: res is not None, 1, True, self.portal_login)
         if systems is None and csv_file is None:
             self.logger.error('Neither csv_file nor systems were specified!')
             return None
@@ -393,8 +384,6 @@ class SMPortal(BasePortal):
         """
         all_systems = []
         host_systems = {}
-
-        self._retr(self.con.ping, lambda res: res is not None, 1, True, self.portal_login)
 
         data = csv.DictReader(open(csv_file))
         for row in data:
