@@ -17,6 +17,7 @@ setup(
     install_requires=[
         "requests",
         "rhsm",
+        "beautifulsoup",
     ],
     dependency_links=[
         "https://github.com/candlepin/python-rhsm/archive/python-rhsm-1.10.7-1.tar.gz#egg=rhsm-1.10.7"
