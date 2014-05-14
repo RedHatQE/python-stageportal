@@ -266,6 +266,8 @@ def main():
                             'type': pool['type']
                         })
             res = pprint.pformat(res)
+        else:
+	    res = None
     else:
         sys.stderr.write('Unknown action: %s\n' % args.action)
         sys.exit(1)
